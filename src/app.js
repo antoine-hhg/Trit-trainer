@@ -175,9 +175,30 @@ async function setupSupabaseAuth() {
         }
     });
 
-    // Check URL parameters for confirmation flags
-    if (window.location.hash && window.location.hash.includes('access_token')) {
-        showToast("Email confirmed! Connected to Supabase.");
+    // Check URL parameters for confirmation flags or errors
+    if (window.location.hash) {
+        const hashStr = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hashStr);
+        if (hashParams.get('error')) {
+            const errDesc = hashParams.get('error_description') || 'Authentication issue';
+            setTimeout(() => {
+                const authMsg = document.getElementById('authNoticeBox');
+                if (authMsg) {
+                    authMsg.className = 'notice-box warning';
+                    authMsg.innerHTML = `
+                        <div style="font-weight:700; margin-bottom:4px;">Email Verification Notice</div>
+                        <div>${decodeURIComponent(errDesc.replace(/\+/g, ' '))}.</div>
+                        <div style="margin-top:6px; font-size:12px; color:var(--text-secondary);">
+                            Note: If using Proton or a privacy email scanner, links may be checked automatically upon arrival. You can also disable "Confirm email" in Supabase Auth settings to log in immediately.
+                        </div>
+                    `;
+                    authMsg.style.display = 'block';
+                    openProfileModal('settings');
+                }
+            }, 500);
+        } else if (hashParams.get('access_token')) {
+            showToast("Email confirmed! Connected to Supabase.");
+        }
     }
 }
 
@@ -325,22 +346,26 @@ async function authSignUp(email, password) {
     if (authMsg) {
         authMsg.className = 'notice-box info';
         authMsg.innerHTML = 'Sending confirmation email...';
-        authMsg.style.display = 'flex';
+        authMsg.style.display = 'block';
     }
+
+    // Capture complete current URL path including GitHub Pages repo (e.g., https://antoine-hhg.github.io/repo-name/)
+    const currentRedirectUrl = window.location.href.split('#')[0].split('?')[0];
 
     try {
         const { data, error } = await supabaseClient.auth.signUp({
             email: email.trim(),
             password: password,
             options: {
-                emailRedirectTo: window.location.origin
+                emailRedirectTo: currentRedirectUrl
             }
         });
 
         if (error) {
             if (authMsg) {
                 authMsg.className = 'notice-box warning';
-                authMsg.innerHTML = `<strong>Registration failed:</strong> ${error.message}`;
+                authMsg.innerHTML = `<div style="font-weight:700; margin-bottom:4px;">Registration failed</div><div>${error.message}</div>`;
+                authMsg.style.display = 'block';
             }
             showToast(error.message);
             return;
@@ -348,7 +373,13 @@ async function authSignUp(email, password) {
 
         if (authMsg) {
             authMsg.className = 'notice-box success';
-            authMsg.innerHTML = `<strong>Registration successful!</strong> Please check your email (<strong>${email}</strong>) for a confirmation link before logging in.`;
+            authMsg.innerHTML = `
+                <div style="font-weight:700; color:#6ee7b7; margin-bottom:4px;">Registration successful!</div>
+                <div style="color:var(--text-primary); line-height:1.5;">
+                    Please check your email (<strong style="color:#ffffff; word-break:break-all;">${email.trim()}</strong>) for a confirmation link before logging in.
+                </div>
+            `;
+            authMsg.style.display = 'block';
         }
         showToast("Check your email for confirmation link!");
 
@@ -380,7 +411,7 @@ async function authSignIn(email, password) {
     if (authMsg) {
         authMsg.className = 'notice-box info';
         authMsg.textContent = 'Signing in...';
-        authMsg.style.display = 'flex';
+        authMsg.style.display = 'block';
     }
 
     try {
