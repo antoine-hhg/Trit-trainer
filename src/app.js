@@ -1605,9 +1605,27 @@ function deleteRun(id) {
 // AI Coach Prompt Generation
 function switchAITab(mode) {
     currentPromptMode = mode;
-    document.getElementById('tabInitial').classList.toggle('active', mode === 'initial');
-    document.getElementById('tabUpdate').classList.toggle('active', mode === 'update');
-    document.getElementById('promptOutput').textContent = 'Click Generate to begin...';
+    const tabInit = document.getElementById('tabInitial');
+    const tabUpd = document.getElementById('tabUpdate');
+    const titleEl = document.getElementById('aiPromptTitle');
+    const descEl = document.getElementById('aiPromptDesc');
+    const wishesGroup = document.getElementById('athleteWishesGroup');
+    const promptOut = document.getElementById('promptOutput');
+
+    if (tabInit) tabInit.classList.toggle('active', mode === 'initial');
+    if (tabUpd) tabUpd.classList.toggle('active', mode === 'update');
+
+    if (mode === 'update') {
+        if (titleEl) titleEl.textContent = 'Generate Weekly Update Prompt';
+        if (descEl) descEl.textContent = 'Analyze your recent training logs, compare against your existing plan, and adapt upcoming weeks while keeping your schedule and routine as stable as possible.';
+        if (wishesGroup) wishesGroup.style.display = 'block';
+    } else {
+        if (titleEl) titleEl.textContent = 'Generate Initial Prompt';
+        if (descEl) descEl.textContent = 'Use your Profile baseline to generate a multi-week plan targeting your goals while avoiding injuries.';
+        if (wishesGroup) wishesGroup.style.display = 'none';
+    }
+
+    if (promptOut) promptOut.textContent = 'Click Generate to begin...';
 }
 
 function copyTextToClipboard(text) {
@@ -1629,6 +1647,64 @@ function fallbackClipboardCopy(text) {
 
 function generatePrompt() {
     generatePromptForWeeks(null);
+}
+
+// Format the initial/existing plan (past, current, and upcoming) for AI prompt injection
+function formatPlanForPrompt(plan, currentWeekNum) {
+    if (!plan || !plan.weeks || !plan.weeks.length) {
+        return "[No prior multi-week plan found in app yet.\nIf you already had an initial training schedule, paste it here so the AI knows your existing routine;\notherwise, instruct the AI to design starting from Week " + currentWeekNum + " based on your profile availability.]";
+    }
+
+    const lines = [];
+
+    // 1. Past weeks summary (what the user had done)
+    const pastWeeks = plan.weeks.filter(w => w.week < currentWeekNum);
+    if (pastWeeks.length > 0) {
+        lines.push(`=== PAST WEEKS (COMPLETED / PREVIOUS) ===`);
+        pastWeeks.forEach(w => {
+            const completedCount = w.workouts.filter((_, idx) => appData.completedWorkouts[`w${w.week}_${idx}`]).length;
+            lines.push(`• Week ${w.week} (${w.phase}): ${completedCount}/${w.workouts.length} scheduled workouts logged/completed. Focus: ${w.description || 'Base fitness'}`);
+        });
+        lines.push('');
+    }
+
+    // 2. Current Week (the initial plan they had for this active week)
+    const currentW = plan.weeks.find(w => w.week === currentWeekNum);
+    if (currentW) {
+        lines.push(`=== CURRENT ACTIVE WEEK: WEEK ${currentW.week} (${currentW.phase}) ===`);
+        lines.push(`Focus: ${currentW.description || 'Current training target'}`);
+        lines.push(`Initial schedule for this week:`);
+        currentW.workouts.forEach((wo, idx) => {
+            const isDone = !!appData.completedWorkouts[`w${currentW.week}_${idx}`];
+            const statusTag = isDone ? "[COMPLETED]" : "[PENDING / UPCOMING]";
+            const metrics = [
+                wo.distance ? `Dist: ${wo.distance}` : '',
+                wo.duration ? `Duration: ${wo.duration}` : '',
+                wo.pace ? `Pace: ${wo.pace}` : ''
+            ].filter(Boolean).join(', ');
+            lines.push(`  • ${wo.day} (${wo.type}) ${statusTag}: "${wo.title}"${metrics ? ` [${metrics}]` : ''}${wo.desc ? ` — ${wo.desc}` : ''}`);
+        });
+        lines.push('');
+    }
+
+    // 3. Upcoming Future Weeks (the initial plan the user will have)
+    const upcomingWeeks = plan.weeks.filter(w => w.week > currentWeekNum);
+    if (upcomingWeeks.length > 0) {
+        lines.push(`=== UPCOMING WEEKS SCHEDULE (INITIAL PLAN THE USER WILL HAVE) ===`);
+        upcomingWeeks.forEach(w => {
+            lines.push(`• Week ${w.week} (${w.phase}) — ${w.description || 'Target progression'}:`);
+            w.workouts.forEach(wo => {
+                const metrics = [
+                    wo.distance ? `Dist: ${wo.distance}` : '',
+                    wo.duration ? `Duration: ${wo.duration}` : '',
+                    wo.pace ? `Pace: ${wo.pace}` : ''
+                ].filter(Boolean).join(', ');
+                lines.push(`    - ${wo.day} (${wo.type}): "${wo.title}"${metrics ? ` [${metrics}]` : ''}${wo.desc ? ` — ${wo.desc}` : ''}`);
+            });
+        });
+    }
+
+    return lines.join('\n');
 }
 
 function generatePromptForWeeks(targetWeeks = null) {
@@ -1691,28 +1767,79 @@ function generatePromptForWeeks(targetWeeks = null) {
         const runs = appData.runs.slice(-10);
         const runLog = runs.map(r => `${r.date} [${r.type}]: ${r.distance}km, ${r.duration}m. Notes: ${r.notes||'none'}`).join('\n');
         
-        prompt = `You are an elite coach updating my training plan.
+        const wishesEl = document.getElementById('athleteWishesInput');
+        const userWishes = wishesEl ? wishesEl.value.trim() : '';
+        const wishesSection = userWishes
+            ? userWishes
+            : `[ATHLETE'S WISHES & SPECIAL REQUESTS (CUSTOMIZE OR LEAVE AS-IS):
+ • Schedule adjustments: (e.g., "Need Saturday morning free, shift long ride to Sunday", "Traveling for 2 days, need hotel-friendly or treadmill sessions")
+ • Workout preferences: (e.g., "Keep Tuesday bike workout unchanged", "Want an extra recovery session", "Feeling ready for longer swim intervals")
+ • Health & fatigue notes: (e.g., "Mild left knee tightness after Thursday run, reduce impact", "Feeling fresh and fully recovered")
+ • Default: "None - please keep training schedule as identical to initial plan as possible."]`;
 
-[ATHLETE PROFILE]
-• Target: ${p.event}
-• Current Week: ${p.currentWeek}
-• Limitations: ${p.limitations || "None"}
-• Availability: ${availStr}
+        const planSection = formatPlanForPrompt(appData.plan, p.currentWeek);
 
-[RECENT LOGS]
-${runLog || "No recent logs"}
+        prompt = `You are an elite endurance and multi-sport coach updating the athlete's training plan.
 
-[TASKS]
-1. Adjust plan for Week ${p.currentWeek} and Week ${p.currentWeek + 1} based on recent logs and current limitations.
-2. Provide daily motivational quotes formatted with pipes: "Monday: ... | Tuesday: ... | Wednesday: ..." in "motivationalQuote".
-3. Update dictionary for any new terms.
-4. Output strict JSON:
+[ATHLETE PROFILE & TARGETS]
+• Target Event: ${p.event} (Goal Time: ${p.targetTime})
+• Race Date: ${p.raceDate || "Not specified"}
+• Current Active Week: Week ${p.currentWeek}
+• Known Limitations / Health: ${p.limitations || "None"}
+• Weekly Availability: ${availStr}
+
+[ATHLETE'S WISHES & SPECIAL REQUESTS FOR THIS WEEK]
+${wishesSection}
+
+[RECENT LOGGED ACTIVITIES (LAST 10)]
+${runLog || "No recent activity logs recorded yet."}
+
+[INITIAL & SCHEDULED TRAINING PLAN (WHAT THE USER HAD AND WILL HAVE)]
+${planSection}
+
+[CORE COACHING DIRECTIVES: SCHEDULE STABILITY & MINIMAL INTERVENTION]
+1. HIGH SCHEDULE FIDELITY (PRIMARY DIRECTIVE):
+   • You MUST try to keep the weekly training schedule, workout distribution, and discipline days as SIMILAR and STABLE as possible compared to the athlete's initial plan.
+   • DO NOT overhaul, rewrite, or unnecessarily reshuffle workouts across days. Athletes rely on consistent routines (e.g. keeping Tuesday as Bike, Saturday as Long Ride, etc.).
+2. ONLY CHANGE IF STRICTLY NECESSARY:
+   • Modify, substitute, or recalibrate workouts ONLY when genuinely justified by:
+     (a) The athlete's specific wishes, travel constraints, or preferences listed above.
+     (b) Reported injuries, excessive fatigue, or persistent soreness in recent logs.
+     (c) Missed critical workouts that require safe, progressive adjustment without sudden volume spikes.
+   • If a scheduled workout was executed well and no conflicts exist, RETAIN IT IN THE PLAN with its original day, discipline, title, and structure (applying only standard progressive calibration to pacing/distance if appropriate).
+3. ADAPTATION SCOPE:
+   • Adjust any remaining pending workouts for Week ${p.currentWeek} and upcoming Week ${p.currentWeek + 1} (and any subsequent weeks as needed).
+   • In "specialInformation", provide a transparent coaching overview detailing:
+     - Exactly what was KEPT UNCHANGED to preserve the athlete's routine and momentum.
+     - What was CHANGED (if anything) and the specific reason based on athlete wishes or recent logs.
+4. MOTIVATION & DICTIONARY:
+   • Provide daily motivational quotes formatted with pipes: "Monday: ... | Tuesday: ... | Wednesday: ..." in "motivationalQuote".
+   • If any new specialized training terms are introduced, wrap them in pipes (e.g. |Cadence Drills|) and define them in the "dictionary" array.
+5. STRICT JSON OUTPUT:
+   Output valid, parseable JSON only matching the schema:
 
 {
-  "motivationalQuote": "Monday: Adjust and adapt. | Tuesday: Consistency is key.",
-  "specialInformation": "Feedback on recent logs...",
+  "motivationalQuote": "Monday: Stay steady. | Tuesday: Trust the rhythm. | Wednesday: Smooth cadence.",
+  "specialInformation": "Coaching overview: Kept your core schedule intact to maintain momentum. Adjusted...",
   "dictionary": [],
-  "weeks": [ /* Array of updated weeks */ ]
+  "weeks": [
+    {
+      "week": ${p.currentWeek},
+      "phase": "...",
+      "description": "...",
+      "workouts": [
+        {
+          "day": "Tuesday",
+          "type": "Swim|Bike|Run|Brick|Rest",
+          "title": "...",
+          "distance": "...",
+          "duration": "...",
+          "pace": "...",
+          "desc": "..."
+        }
+      ]
+    }
+  ]
 }`;
     }
 
