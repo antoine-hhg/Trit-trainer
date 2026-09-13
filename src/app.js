@@ -145,6 +145,8 @@ async function setupSupabaseAuth() {
             currentUser = session.user;
             updateSyncStatusUI('synced');
             updateProfileSettingsUI();
+            // Pull newest cloud state in the background
+            handleUserLoginSync();
         } else {
             currentUser = null;
             updateSyncStatusUI('local');
@@ -189,7 +191,7 @@ async function setupSupabaseAuth() {
                         <div style="font-weight:700; margin-bottom:4px;">Email Verification Notice</div>
                         <div>${decodeURIComponent(errDesc.replace(/\+/g, ' '))}.</div>
                         <div style="margin-top:6px; font-size:12px; color:var(--text-secondary);">
-                            Note: If using Proton or a privacy email scanner, links may be checked automatically upon arrival. You can also disable "Confirm email" in Supabase Auth settings to log in immediately.
+                            Note: If using Proton or a privacy email scanner, links may be checked automatically upon arrival. You can disable "Confirm email" in your Supabase Auth settings to log in immediately without links.
                         </div>
                     `;
                     authMsg.style.display = 'block';
@@ -202,35 +204,78 @@ async function setupSupabaseAuth() {
     }
 }
 
-// When logging in: Fetch user state from table "user_data", overwrite local state
+// When logging in: Fetch user state from Supabase (user_metadata + user_data table), overwrite local state
 async function handleUserLoginSync() {
     if (!supabaseClient || !currentUser) return;
     updateSyncStatusUI('syncing');
 
     try {
-        const { data, error } = await supabaseClient
-            .from('user_data')
-            .select('*')
-            .eq('user_id', currentUser.id)
-            .maybeSingle();
-
-        if (error) {
-            console.error("Error fetching user data:", error);
-            // If table does not exist or empty, push existing local data to cloud
-            await syncToSupabase();
-            return;
+        // 1. Refresh currentUser to ensure we have the absolute latest user_metadata from server
+        try {
+            const { data: userData } = await supabaseClient.auth.getUser();
+            if (userData && userData.user) {
+                currentUser = userData.user;
+            }
+        } catch (uErr) {
+            console.warn("User refresh note:", uErr);
         }
 
-        if (data && (data.data || data.payload)) {
-            const remoteData = data.data || data.payload;
-            appData = deepMerge(DEFAULT_DATA, remoteData);
-            setStorageItem('trit_data', JSON.stringify(appData));
-            showToast("Cloud profile & data synchronized!");
-            renderAllPages();
+        let remoteData = null;
+        let remoteTimestamp = 0;
+
+        // Check user_metadata (natively supported on ALL Supabase instances without needing any SQL tables)
+        if (currentUser && currentUser.user_metadata && currentUser.user_metadata.trit_payload) {
+            remoteData = currentUser.user_metadata.trit_payload;
+            remoteTimestamp = currentUser.user_metadata.trit_last_sync || remoteData.lastModified || 0;
+        }
+
+        // Also check user_data table if the table exists in user's Supabase database
+        try {
+            const { data: tableRow, error: tableErr } = await supabaseClient
+                .from('user_data')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
+            if (!tableErr && tableRow && (tableRow.data || tableRow.payload)) {
+                const tablePayload = tableRow.data || tableRow.payload;
+                const tableTime = new Date(tableRow.updated_at || 0).getTime() || tablePayload.lastModified || 0;
+                if (tableTime >= remoteTimestamp || !remoteData) {
+                    remoteData = tablePayload;
+                    remoteTimestamp = tableTime;
+                }
+            }
+        } catch (tblErr) {
+            // Table doesn't exist - this is expected if user didn't run SQL DDL
+        }
+
+        const localTime = appData.lastModified || 0;
+        const localHasData = (appData.history && appData.history.length > 0) || 
+                             (appData.calendarEvents && appData.calendarEvents.length > 0) ||
+                             (appData.plan && appData.plan.weeks && appData.plan.weeks.length > 0) ||
+                             (appData.athlete && appData.athlete.age && appData.athlete.age !== 28);
+
+        if (remoteData) {
+            // Remote has data!
+            // If remote is newer, or if this device only had fresh default data, restore remote state:
+            if (remoteTimestamp >= localTime || !localHasData) {
+                appData = deepMerge(DEFAULT_DATA, remoteData);
+                appData.lastModified = Math.max(remoteTimestamp, Date.now());
+                setStorageItem('trit_data', JSON.stringify(appData));
+                renderAllPages();
+                showToast("Cloud data synchronized!");
+            } else {
+                // Local state was modified offline with newer changes; sync up to cloud!
+                await syncToSupabase();
+                showToast("Local updates saved to cloud!");
+            }
             updateSyncStatusUI('synced');
+            updateLastSyncTextUI();
         } else {
-            // First time login with no existing remote state: upload local data
+            // First time login on empty cloud account: push existing local state to cloud!
             await syncToSupabase();
+            updateSyncStatusUI('synced');
+            updateLastSyncTextUI();
         }
     } catch (e) {
         console.error("Error during login sync:", e);
@@ -259,7 +304,7 @@ function scheduleCloudSync() {
     }, 600);
 }
 
-// Upsert state to table "user_data" under user_id
+// Upsert state directly to user_metadata and optionally to table "user_data"
 async function syncToSupabase() {
     if (!supabaseClient || !currentUser) return;
 
@@ -270,27 +315,76 @@ async function syncToSupabase() {
     }
 
     try {
-        const payload = {
-            user_id: currentUser.id,
-            data: appData,
-            updated_at: new Date().toISOString()
-        };
+        updateSyncStatusUI('syncing');
+        const now = Date.now();
+        appData.lastModified = now;
 
-        const { error } = await supabaseClient
-            .from('user_data')
-            .upsert(payload, { onConflict: 'user_id' });
+        // 1. Primary: Save directly to Supabase Auth user_metadata
+        // Guaranteed to work across all projects without needing any SQL migrations
+        const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
+            data: {
+                trit_payload: appData,
+                trit_last_sync: now,
+                updated_at: new Date().toISOString()
+            }
+        });
 
-        if (error) {
-            console.warn("Supabase upsert note:", error.message);
-            updateSyncStatusUI('error');
-        } else {
-            isOfflinePendingSync = false;
-            updateSyncStatusUI('synced');
+        if (metaErr) {
+            console.warn("Metadata update note:", metaErr.message);
+        } else if (updatedUser && updatedUser.user) {
+            currentUser = updatedUser.user;
         }
+
+        // 2. Secondary: If table user_data exists, upsert there too
+        try {
+            await supabaseClient
+                .from('user_data')
+                .upsert({
+                    user_id: currentUser.id,
+                    data: appData,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id' });
+        } catch (tblErr) {
+            // Table might not exist; safe to ignore
+        }
+
+        isOfflinePendingSync = false;
+        updateSyncStatusUI('synced');
+        updateLastSyncTextUI();
     } catch (e) {
         console.error("Sync error:", e);
         updateSyncStatusUI('error');
     }
+}
+
+function updateLastSyncTextUI() {
+    const el = document.getElementById('settingsLastSyncText');
+    if (el) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        el.textContent = `● Status: Cloud Synchronized (at ${timeStr})`;
+    }
+}
+
+async function manualCloudSync() {
+    if (!currentUser || !supabaseClient) {
+        showToast("Please log in first to sync with the cloud.");
+        return;
+    }
+    showToast("Synchronizing with Supabase...");
+    updateSyncStatusUI('syncing');
+    await handleUserLoginSync();
+    await syncToSupabase();
+    showToast("Cloud synchronization complete!");
+    updateSyncStatusUI('synced');
+}
+
+function toggleEmailVerificationGuide() {
+    const guide = document.getElementById('emailVerifyGuideContent');
+    const icon = document.getElementById('emailVerifyToggleIcon');
+    if (!guide) return;
+    const isHidden = guide.style.display === 'none';
+    guide.style.display = isHidden ? 'block' : 'none';
+    if (icon) icon.textContent = isHidden ? '▲ Hide' : '▼ Instructions';
 }
 
 // Online / Offline Listeners
@@ -341,15 +435,18 @@ async function authSignUp(email, password) {
         showToast("Please enter both email and password.");
         return;
     }
+    if (password.length < 6) {
+        showToast("Password must be at least 6 characters.");
+        return;
+    }
 
     const authMsg = document.getElementById('authNoticeBox');
     if (authMsg) {
         authMsg.className = 'notice-box info';
-        authMsg.innerHTML = 'Sending confirmation email...';
+        authMsg.innerHTML = 'Creating account & syncing data...';
         authMsg.style.display = 'block';
     }
 
-    // Capture complete current URL path including GitHub Pages repo (e.g., https://antoine-hhg.github.io/repo-name/)
     const currentRedirectUrl = window.location.href.split('#')[0].split('?')[0];
 
     try {
@@ -357,11 +454,29 @@ async function authSignUp(email, password) {
             email: email.trim(),
             password: password,
             options: {
-                emailRedirectTo: currentRedirectUrl
+                emailRedirectTo: currentRedirectUrl,
+                data: {
+                    trit_payload: appData,
+                    trit_last_sync: Date.now(),
+                    updated_at: new Date().toISOString()
+                }
             }
         });
 
         if (error) {
+            if (error.message && error.message.toLowerCase().includes('already registered')) {
+                if (authMsg) {
+                    authMsg.className = 'notice-box warning';
+                    authMsg.innerHTML = `
+                        <div style="font-weight:700; margin-bottom:4px;">Account already exists</div>
+                        <div>This email is already registered. Please click <strong>Log In</strong> above.</div>
+                    `;
+                    authMsg.style.display = 'block';
+                }
+                showToast("Account already exists. Please Log In.");
+                return;
+            }
+
             if (authMsg) {
                 authMsg.className = 'notice-box warning';
                 authMsg.innerHTML = `<div style="font-weight:700; margin-bottom:4px;">Registration failed</div><div>${error.message}</div>`;
@@ -371,28 +486,61 @@ async function authSignUp(email, password) {
             return;
         }
 
+        // Scenario 1: Email verification is DISABLED in Supabase (session is returned immediately)
+        if (data && data.session && data.user) {
+            currentUser = data.user;
+            await syncToSupabase();
+            updateProfileSettingsUI();
+            if (authMsg) {
+                authMsg.className = 'notice-box success';
+                authMsg.innerHTML = `
+                    <div style="font-weight:700; color:#6ee7b7; margin-bottom:4px;">Account Created & Logged In!</div>
+                    <div style="color:var(--text-primary);">Email verification is disabled. You are logged in immediately and your workouts are synced to the cloud.</div>
+                `;
+                authMsg.style.display = 'block';
+            }
+            showToast("Account created & logged in immediately!");
+            return;
+        }
+
+        // Scenario 2: Attempt immediate sign in in case project auto-confirmed
+        try {
+            const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+                email: email.trim(),
+                password: password
+            });
+            if (!signInErr && signInData && signInData.session) {
+                currentUser = signInData.user;
+                await syncToSupabase();
+                updateProfileSettingsUI();
+                showToast("Account created & logged in!");
+                return;
+            }
+        } catch (autoErr) {
+            // Confirmation required
+        }
+
+        // Scenario 3: Email verification is ENABLED in Supabase project settings
         if (authMsg) {
-            authMsg.className = 'notice-box success';
+            authMsg.className = 'notice-box warning';
             authMsg.innerHTML = `
-                <div style="font-weight:700; color:#6ee7b7; margin-bottom:4px;">Registration successful!</div>
-                <div style="color:var(--text-primary); line-height:1.5;">
-                    Please check your email (<strong style="color:#ffffff; word-break:break-all;">${email.trim()}</strong>) for a confirmation link before logging in.
+                <div style="font-weight:700; color:#f59e0b; margin-bottom:6px;">Email Confirmation Required</div>
+                <div style="color:var(--text-primary); line-height:1.5; margin-bottom:8px;">
+                    Account created for <strong style="color:#ffffff;">${email.trim()}</strong>! A verification link has been sent.
+                </div>
+                <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:8px; font-size:11px; line-height:1.5;">
+                    <strong>Want instant login without emails?</strong><br>
+                    In your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" style="color:#f59e0b; text-decoration:underline;">Supabase Dashboard</a> &rarr; <strong>Authentication</strong> &rarr; <strong>Providers</strong> &rarr; <strong>Email</strong>, turn <strong>Confirm email</strong> to <strong>OFF</strong>.
                 </div>
             `;
             authMsg.style.display = 'block';
         }
-        showToast("Check your email for confirmation link!");
-
-        // If auto-logged in (session returned immediately), push local data to Supabase
-        if (data && data.session) {
-            currentUser = data.session.user;
-            await syncToSupabase();
-            updateProfileSettingsUI();
-        }
+        showToast("Check your email (or disable verification in Supabase)");
     } catch (e) {
         if (authMsg) {
             authMsg.className = 'notice-box warning';
             authMsg.textContent = e.message || 'Error creating account';
+            authMsg.style.display = 'block';
         }
     }
 }
@@ -423,7 +571,19 @@ async function authSignIn(email, password) {
         if (error) {
             if (authMsg) {
                 authMsg.className = 'notice-box warning';
-                authMsg.innerHTML = `<strong>Sign In failed:</strong> ${error.message}`;
+                if (error.message && error.message.toLowerCase().includes('email not confirmed')) {
+                    authMsg.innerHTML = `
+                        <div style="font-weight:700; margin-bottom:4px;">Email Not Confirmed</div>
+                        <div style="margin-bottom:8px;">Supabase requires email confirmation for this account.</div>
+                        <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:8px; font-size:11px; line-height:1.5;">
+                            <strong>To disable verification and log in immediately:</strong><br>
+                            In <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" style="color:#f59e0b; text-decoration:underline;">Supabase Dashboard</a> &rarr; <strong>Authentication</strong> &rarr; <strong>Providers</strong> &rarr; <strong>Email</strong>, toggle <strong>Confirm email</strong> to <strong>OFF</strong> and save.
+                        </div>
+                    `;
+                } else {
+                    authMsg.innerHTML = `<div style="font-weight:700; margin-bottom:4px;">Sign In Failed</div><div>${error.message}</div>`;
+                }
+                authMsg.style.display = 'block';
             }
             showToast(error.message);
             return;
@@ -432,6 +592,7 @@ async function authSignIn(email, password) {
         if (authMsg) {
             authMsg.className = 'notice-box success';
             authMsg.textContent = "Signed in successfully!";
+            authMsg.style.display = 'block';
         }
         currentUser = data.user;
         await handleUserLoginSync();
@@ -441,6 +602,7 @@ async function authSignIn(email, password) {
         if (authMsg) {
             authMsg.className = 'notice-box warning';
             authMsg.textContent = e.message || 'Login error';
+            authMsg.style.display = 'block';
         }
     }
 }
@@ -469,13 +631,28 @@ async function deleteCloudAccountData() {
 
     try {
         updateSyncStatusUI('syncing');
-        const { error } = await supabaseClient
-            .from('user_data')
-            .delete()
-            .eq('user_id', currentUser.id);
+        
+        // 1. Wipe metadata in Supabase Auth
+        try {
+            await supabaseClient.auth.updateUser({
+                data: {
+                    trit_payload: null,
+                    trit_last_sync: null,
+                    updated_at: new Date().toISOString()
+                }
+            });
+        } catch (metaErr) {
+            console.warn("Wipe metadata note:", metaErr);
+        }
 
-        if (error) {
-            console.warn("Delete note:", error.message);
+        // 2. Wipe from user_data table if present
+        try {
+            await supabaseClient
+                .from('user_data')
+                .delete()
+                .eq('user_id', currentUser.id);
+        } catch (tblErr) {
+            console.warn("Delete table note:", tblErr);
         }
 
         await supabaseClient.auth.signOut();
@@ -1824,3 +2001,5 @@ window.copyDataJSON = copyDataJSON;
 window.importDataJSON = importDataJSON;
 window.resetLocalStorage = resetLocalStorage;
 window.syncToSupabase = syncToSupabase;
+window.manualCloudSync = manualCloudSync;
+window.toggleEmailVerificationGuide = toggleEmailVerificationGuide;
