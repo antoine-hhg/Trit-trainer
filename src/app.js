@@ -8,6 +8,21 @@ let syncStatus = 'local'; // 'local' | 'synced' | 'syncing' | 'offline' | 'error
 let isOfflinePendingSync = false;
 let syncDebounceTimeout = null;
 
+// Reliable promise timeout helper to prevent iOS Safari from hanging indefinitely
+function withTimeout(promise, ms = 4000, fallbackVal = null) {
+    let timer;
+    const timeoutPromise = new Promise(resolve => {
+        timer = setTimeout(() => resolve(fallbackVal), ms);
+    });
+    return Promise.race([
+        Promise.resolve(promise).catch(err => {
+            console.warn("Promise operation note:", err);
+            return fallbackVal;
+        }),
+        timeoutPromise
+    ]).finally(() => clearTimeout(timer));
+}
+
 // Initialize Supabase Client
 function initSupabase() {
     try {
@@ -16,12 +31,16 @@ function initSupabase() {
                 auth: {
                     persistSession: true,
                     autoRefreshToken: true,
-                    detectSessionInUrl: true
+                    detectSessionInUrl: true,
+                    // Bypass Web Locks API on Safari / iOS WebKit to prevent locks deadlocking & 5-minute hanging
+                    lock: async (_name, _acquireTimeout, fn) => {
+                        return await fn();
+                    }
                 }
             });
             setupSupabaseAuth();
         } else {
-            console.warn("Supabase library not loaded yet.");
+            setTimeout(initSupabase, 200);
         }
     } catch(e) {
         console.error("Supabase init error:", e);
@@ -140,13 +159,18 @@ async function setupSupabaseAuth() {
     if (!supabaseClient) return;
 
     try {
-        const { data: { session } } = await supabaseClient.auth.getSession();
+        const sessionRes = await withTimeout(
+            supabaseClient.auth.getSession(),
+            3500,
+            { data: { session: null } }
+        );
+        const session = sessionRes && sessionRes.data ? sessionRes.data.session : null;
         if (session && session.user) {
             currentUser = session.user;
             updateSyncStatusUI('synced');
             updateProfileSettingsUI();
-            // Pull newest cloud state in the background
-            handleUserLoginSync();
+            // Automatically sync newest cloud updates on page reload/startup
+            await handleUserLoginSync(true);
         } else {
             currentUser = null;
             updateSyncStatusUI('local');
@@ -157,24 +181,25 @@ async function setupSupabaseAuth() {
     }
 
     // Handle Auth state change & email confirmation redirects
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-        console.log("Auth state change:", event, session);
-        if (session && session.user) {
-            const isNewLogin = (!currentUser || currentUser.id !== session.user.id);
-            currentUser = session.user;
-            
-            if (event === 'SIGNED_IN' && isNewLogin) {
-                showToast(`Welcome, ${session.user.email}!`);
-                await handleUserLoginSync();
-            } else if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-                updateSyncStatusUI('synced');
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        setTimeout(async () => {
+            if (session && session.user) {
+                const isNewLogin = (!currentUser || currentUser.id !== session.user.id);
+                currentUser = session.user;
+                
+                if (event === 'SIGNED_IN' && isNewLogin) {
+                    showToast(`Welcome, ${session.user.email}!`);
+                    await handleUserLoginSync();
+                } else if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+                    updateSyncStatusUI('synced');
+                }
+                updateProfileSettingsUI();
+            } else if (event === 'SIGNED_OUT') {
+                currentUser = null;
+                updateSyncStatusUI('local');
+                updateProfileSettingsUI();
             }
-            updateProfileSettingsUI();
-        } else {
-            currentUser = null;
-            updateSyncStatusUI('local');
-            updateProfileSettingsUI();
-        }
+        }, 0);
     });
 
     // Check URL parameters for confirmation flags or errors
@@ -188,11 +213,8 @@ async function setupSupabaseAuth() {
                 if (authMsg) {
                     authMsg.className = 'notice-box warning';
                     authMsg.innerHTML = `
-                        <div style="font-weight:700; margin-bottom:4px;">Email Verification Notice</div>
+                        <div style="font-weight:700; margin-bottom:4px;">Authentication Notice</div>
                         <div>${decodeURIComponent(errDesc.replace(/\+/g, ' '))}.</div>
-                        <div style="margin-top:6px; font-size:12px; color:var(--text-secondary);">
-                            Note: If using Proton or a privacy email scanner, links may be checked automatically upon arrival. You can disable "Confirm email" in your Supabase Auth settings to log in immediately without links.
-                        </div>
                     `;
                     authMsg.style.display = 'block';
                     openProfileModal('settings');
@@ -204,17 +226,17 @@ async function setupSupabaseAuth() {
     }
 }
 
-// When logging in: Fetch user state from Supabase (user_metadata + user_data table), overwrite local state
-async function handleUserLoginSync() {
+// When logging in or reloading: Fetch user state from Supabase, overwrite local state if remote is newer, or push local updates to cloud
+async function handleUserLoginSync(isAutoReload = false) {
     if (!supabaseClient || !currentUser) return;
     updateSyncStatusUI('syncing');
 
     try {
-        // 1. Refresh currentUser to ensure we have the absolute latest user_metadata from server
+        // 1. Refresh currentUser to ensure we have the absolute latest user_metadata from server with timeout
         try {
-            const { data: userData } = await supabaseClient.auth.getUser();
-            if (userData && userData.user) {
-                currentUser = userData.user;
+            const userRes = await withTimeout(supabaseClient.auth.getUser(), 3000, null);
+            if (userRes && userRes.data && userRes.data.user) {
+                currentUser = userRes.data.user;
             }
         } catch (uErr) {
             console.warn("User refresh note:", uErr);
@@ -229,20 +251,27 @@ async function handleUserLoginSync() {
             remoteTimestamp = currentUser.user_metadata.trit_last_sync || remoteData.lastModified || 0;
         }
 
-        // Also check user_data table if the table exists in user's Supabase database
+        // Also check user_data table if the table exists in user's Supabase database with timeout
         try {
-            const { data: tableRow, error: tableErr } = await supabaseClient
-                .from('user_data')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .maybeSingle();
+            const tableRes = await withTimeout(
+                supabaseClient
+                    .from('user_data')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .maybeSingle(),
+                3000,
+                null
+            );
 
-            if (!tableErr && tableRow && (tableRow.data || tableRow.payload)) {
+            if (tableRes && !tableRes.error && tableRes.data) {
+                const tableRow = tableRes.data;
                 const tablePayload = tableRow.data || tableRow.payload;
-                const tableTime = new Date(tableRow.updated_at || 0).getTime() || tablePayload.lastModified || 0;
-                if (tableTime >= remoteTimestamp || !remoteData) {
-                    remoteData = tablePayload;
-                    remoteTimestamp = tableTime;
+                if (tablePayload) {
+                    const tableTime = new Date(tableRow.updated_at || 0).getTime() || tablePayload.lastModified || 0;
+                    if (tableTime >= remoteTimestamp || !remoteData) {
+                        remoteData = tablePayload;
+                        remoteTimestamp = tableTime;
+                    }
                 }
             }
         } catch (tblErr) {
@@ -250,10 +279,10 @@ async function handleUserLoginSync() {
         }
 
         const localTime = appData.lastModified || 0;
-        const localHasData = (appData.history && appData.history.length > 0) || 
-                             (appData.calendarEvents && appData.calendarEvents.length > 0) ||
+        const localHasData = (appData.runs && appData.runs.length > 0) || 
+                             (appData.customEvents && appData.customEvents.length > 0) ||
                              (appData.plan && appData.plan.weeks && appData.plan.weeks.length > 0) ||
-                             (appData.athlete && appData.athlete.age && appData.athlete.age !== 28);
+                             (appData.profile && appData.profile.age && appData.profile.age !== 28);
 
         if (remoteData) {
             // Remote has data!
@@ -263,11 +292,19 @@ async function handleUserLoginSync() {
                 appData.lastModified = Math.max(remoteTimestamp, Date.now());
                 setStorageItem('trit_data', JSON.stringify(appData));
                 renderAllPages();
-                showToast("Cloud data synchronized!");
+                if (isAutoReload) {
+                    showToast("Cloud profile & workouts auto-synced!");
+                } else {
+                    showToast("Cloud data synchronized!");
+                }
             } else {
                 // Local state was modified offline with newer changes; sync up to cloud!
                 await syncToSupabase();
-                showToast("Local updates saved to cloud!");
+                if (isAutoReload) {
+                    showToast("Local updates auto-synced to cloud!");
+                } else {
+                    showToast("Local updates saved to cloud!");
+                }
             }
             updateSyncStatusUI('synced');
             updateLastSyncTextUI();
@@ -278,7 +315,7 @@ async function handleUserLoginSync() {
             updateLastSyncTextUI();
         }
     } catch (e) {
-        console.error("Error during login sync:", e);
+        console.error("Error during sync:", e);
         updateSyncStatusUI('error');
     }
 }
@@ -319,31 +356,28 @@ async function syncToSupabase() {
         const now = Date.now();
         appData.lastModified = now;
 
-        // 1. Primary: Save directly to Supabase Auth user_metadata
-        // Guaranteed to work across all projects without needing any SQL migrations
-        const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
+        // 1. Primary: Save directly to Supabase Auth user_metadata with 4s timeout
+        const metaRes = await withTimeout(supabaseClient.auth.updateUser({
             data: {
                 trit_payload: appData,
                 trit_last_sync: now,
                 updated_at: new Date().toISOString()
             }
-        });
+        }), 4000, null);
 
-        if (metaErr) {
-            console.warn("Metadata update note:", metaErr.message);
-        } else if (updatedUser && updatedUser.user) {
-            currentUser = updatedUser.user;
+        if (metaRes && metaRes.data && metaRes.data.user) {
+            currentUser = metaRes.data.user;
         }
 
-        // 2. Secondary: If table user_data exists, upsert there too
+        // 2. Secondary: If table user_data exists, upsert there too with 3s timeout
         try {
-            await supabaseClient
+            await withTimeout(supabaseClient
                 .from('user_data')
                 .upsert({
                     user_id: currentUser.id,
                     data: appData,
                     updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' });
+                }, { onConflict: 'user_id' }), 3000, null);
         } catch (tblErr) {
             // Table might not exist; safe to ignore
         }
@@ -376,15 +410,6 @@ async function manualCloudSync() {
     await syncToSupabase();
     showToast("Cloud synchronization complete!");
     updateSyncStatusUI('synced');
-}
-
-function toggleEmailVerificationGuide() {
-    const guide = document.getElementById('emailVerifyGuideContent');
-    const icon = document.getElementById('emailVerifyToggleIcon');
-    if (!guide) return;
-    const isHidden = guide.style.display === 'none';
-    guide.style.display = isHidden ? 'block' : 'none';
-    if (icon) icon.textContent = isHidden ? '▲ Hide' : '▼ Instructions';
 }
 
 // Online / Offline Listeners
@@ -450,7 +475,7 @@ async function authSignUp(email, password) {
     const currentRedirectUrl = window.location.href.split('#')[0].split('?')[0];
 
     try {
-        const { data, error } = await supabaseClient.auth.signUp({
+        const { data, error } = await withTimeout(supabaseClient.auth.signUp({
             email: email.trim(),
             password: password,
             options: {
@@ -461,7 +486,7 @@ async function authSignUp(email, password) {
                     updated_at: new Date().toISOString()
                 }
             }
-        });
+        }), 6000, { data: null, error: { message: 'Connection timed out. Please check your network and try again.' } });
 
         if (error) {
             if (error.message && error.message.toLowerCase().includes('already registered')) {
@@ -486,7 +511,7 @@ async function authSignUp(email, password) {
             return;
         }
 
-        // Scenario 1: Email verification is DISABLED in Supabase (session is returned immediately)
+        // Scenario 1: Immediate session returned
         if (data && data.session && data.user) {
             currentUser = data.user;
             await syncToSupabase();
@@ -495,47 +520,41 @@ async function authSignUp(email, password) {
                 authMsg.className = 'notice-box success';
                 authMsg.innerHTML = `
                     <div style="font-weight:700; color:#6ee7b7; margin-bottom:4px;">Account Created & Logged In!</div>
-                    <div style="color:var(--text-primary);">Email verification is disabled. You are logged in immediately and your workouts are synced to the cloud.</div>
+                    <div style="color:var(--text-primary);">You are logged in and your workouts are synced to the cloud.</div>
                 `;
                 authMsg.style.display = 'block';
             }
-            showToast("Account created & logged in immediately!");
+            showToast("Account created & logged in!");
             return;
         }
 
         // Scenario 2: Attempt immediate sign in in case project auto-confirmed
         try {
-            const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+            const signInRes = await withTimeout(supabaseClient.auth.signInWithPassword({
                 email: email.trim(),
                 password: password
-            });
-            if (!signInErr && signInData && signInData.session) {
-                currentUser = signInData.user;
+            }), 4000, null);
+            if (signInRes && !signInRes.error && signInRes.data && signInRes.data.session) {
+                currentUser = signInRes.data.user;
                 await syncToSupabase();
                 updateProfileSettingsUI();
                 showToast("Account created & logged in!");
                 return;
             }
-        } catch (autoErr) {
-            // Confirmation required
-        }
+        } catch (autoErr) {}
 
-        // Scenario 3: Email verification is ENABLED in Supabase project settings
+        // Scenario 3: Email verification is required
         if (authMsg) {
             authMsg.className = 'notice-box warning';
             authMsg.innerHTML = `
-                <div style="font-weight:700; color:#f59e0b; margin-bottom:6px;">Email Confirmation Required</div>
-                <div style="color:var(--text-primary); line-height:1.5; margin-bottom:8px;">
-                    Account created for <strong style="color:#ffffff;">${email.trim()}</strong>! A verification link has been sent.
-                </div>
-                <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:8px; font-size:11px; line-height:1.5;">
-                    <strong>Want instant login without emails?</strong><br>
-                    In your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" style="color:#f59e0b; text-decoration:underline;">Supabase Dashboard</a> &rarr; <strong>Authentication</strong> &rarr; <strong>Providers</strong> &rarr; <strong>Email</strong>, turn <strong>Confirm email</strong> to <strong>OFF</strong>.
+                <div style="font-weight:700; color:#f59e0b; margin-bottom:6px;">Verification Link Sent</div>
+                <div style="color:var(--text-primary); line-height:1.5;">
+                    Account created for <strong style="color:#ffffff;">${email.trim()}</strong>! Please check your email to confirm your account.
                 </div>
             `;
             authMsg.style.display = 'block';
         }
-        showToast("Check your email (or disable verification in Supabase)");
+        showToast("Please check your email for confirmation link.");
     } catch (e) {
         if (authMsg) {
             authMsg.className = 'notice-box warning';
@@ -563,10 +582,10 @@ async function authSignIn(email, password) {
     }
 
     try {
-        const { data, error } = await supabaseClient.auth.signInWithPassword({
+        const { data, error } = await withTimeout(supabaseClient.auth.signInWithPassword({
             email: email.trim(),
             password: password
-        });
+        }), 6000, { data: null, error: { message: 'Sign in timed out. Please check your connection.' } });
 
         if (error) {
             if (authMsg) {
@@ -574,11 +593,7 @@ async function authSignIn(email, password) {
                 if (error.message && error.message.toLowerCase().includes('email not confirmed')) {
                     authMsg.innerHTML = `
                         <div style="font-weight:700; margin-bottom:4px;">Email Not Confirmed</div>
-                        <div style="margin-bottom:8px;">Supabase requires email confirmation for this account.</div>
-                        <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:8px; font-size:11px; line-height:1.5;">
-                            <strong>To disable verification and log in immediately:</strong><br>
-                            In <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" style="color:#f59e0b; text-decoration:underline;">Supabase Dashboard</a> &rarr; <strong>Authentication</strong> &rarr; <strong>Providers</strong> &rarr; <strong>Email</strong>, toggle <strong>Confirm email</strong> to <strong>OFF</strong> and save.
-                        </div>
+                        <div>Please confirm your email address via the link sent to your inbox.</div>
                     `;
                 } else {
                     authMsg.innerHTML = `<div style="font-weight:700; margin-bottom:4px;">Sign In Failed</div><div>${error.message}</div>`;
@@ -610,13 +625,24 @@ async function authSignIn(email, password) {
 async function authSignOut() {
     if (!supabaseClient) return;
     try {
-        await supabaseClient.auth.signOut();
+        // Fast timeout for remote signOut so Safari/iPhone NEVER hangs
+        await withTimeout(supabaseClient.auth.signOut(), 2500, null);
+    } catch (e) {
+        console.warn("Sign out note:", e);
+    } finally {
+        // Immediately purge session locally to ensure instant UI transition on all devices
         currentUser = null;
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+                    localStorage.removeItem(k);
+                }
+            }
+        } catch (storageErr) {}
         updateSyncStatusUI('local');
         updateProfileSettingsUI();
         showToast("Logged out. Switched to Local Mode.");
-    } catch (e) {
-        console.error("Sign out error:", e);
     }
 }
 
@@ -634,34 +660,43 @@ async function deleteCloudAccountData() {
         
         // 1. Wipe metadata in Supabase Auth
         try {
-            await supabaseClient.auth.updateUser({
+            await withTimeout(supabaseClient.auth.updateUser({
                 data: {
                     trit_payload: null,
                     trit_last_sync: null,
                     updated_at: new Date().toISOString()
                 }
-            });
+            }), 3000, null);
         } catch (metaErr) {
             console.warn("Wipe metadata note:", metaErr);
         }
 
         // 2. Wipe from user_data table if present
         try {
-            await supabaseClient
+            await withTimeout(supabaseClient
                 .from('user_data')
                 .delete()
-                .eq('user_id', currentUser.id);
+                .eq('user_id', currentUser.id), 3000, null);
         } catch (tblErr) {
             console.warn("Delete table note:", tblErr);
         }
 
-        await supabaseClient.auth.signOut();
+        await withTimeout(supabaseClient.auth.signOut(), 2500, null);
+    } catch(e) {
+        console.warn("Error wiping cloud data:", e);
+    } finally {
         currentUser = null;
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+                    localStorage.removeItem(k);
+                }
+            }
+        } catch (storageErr) {}
         updateSyncStatusUI('local');
         updateProfileSettingsUI();
         showToast("Cloud account data deleted and signed out.");
-    } catch(e) {
-        showToast("Error deleting cloud data: " + e.message);
     }
 }
 
@@ -2002,4 +2037,3 @@ window.importDataJSON = importDataJSON;
 window.resetLocalStorage = resetLocalStorage;
 window.syncToSupabase = syncToSupabase;
 window.manualCloudSync = manualCloudSync;
-window.toggleEmailVerificationGuide = toggleEmailVerificationGuide;
