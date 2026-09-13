@@ -22,7 +22,556 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="./src/styles.css">
+    <style>
+:root {
+    --bg-primary: #000000;
+    --bg-secondary: #1f1f22;
+    --bg-card: #161618;
+    --bg-card-hover: #242427;
+    --accent: #fc5200;
+    --accent-dim: rgba(252, 82, 0, 0.16);
+    --accent-bright: #ff6f26;
+    --warning: #ef4444;
+    --warning-dim: rgba(239, 68, 68, 0.16);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59, 130, 246, 0.16);
+    --green: #10b981;
+    --green-dim: rgba(16, 185, 129, 0.16);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-dim: #71717a;
+    --border: #28282b;
+    --border-light: #38383c;
+    --radius: 18px;
+    --radius-sm: 10px;
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    width: 100%;
+}
+
+/* Header */
+.header {
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: max(16px, env(safe-area-inset-top)) 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+}
+
+.logo-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+.sync-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+}
+.sync-dot.synced { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.sync-dot.syncing { background: var(--accent); animation: pulse 1.2s infinite; }
+.sync-dot.offline { background: var(--warning); }
+.sync-dot.local { background: var(--blue); }
+
+@keyframes pulse {
+    0% { opacity: 0.4; }
+    50% { opacity: 1; }
+    100% { opacity: 0.4; }
+}
+
+/* Bottom Tab Navigation */
+.nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    background: rgba(18, 18, 20, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) 10px;
+    z-index: 100;
+    justify-content: space-around;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.nav-btn {
+    flex: 1;
+    max-width: 80px;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border-radius: 14px;
+}
+
+.nav-btn.active {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.nav-indicator {
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0;
+    transform: translateY(2px);
+    transition: var(--transition);
+}
+
+.nav-btn.active .nav-indicator {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.btn {
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.btn:active { transform: scale(0.97); }
+.btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-accent:active { background: #e04800; }
+.btn-outline { background: transparent; border: 1px solid var(--border-light); color: var(--text-primary); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: var(--warning-dim); border-color: var(--warning); color: var(--warning); }
+
+/* Main Layout */
+.main { max-width: 800px; margin: 0 auto; padding: 24px 16px; width: 100%; }
+.page { display: none; animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.page.active { display: block; }
+
+/* Dashboard Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+}
+
+.volume-chart-card::after { display: none; }
+
+.stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+.stat-value { font-size: 26px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
+.stat-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+/* Progress Bar */
+.progress-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow); }
+.progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.progress-title { font-size: 15px; font-weight: 600; }
+.progress-pct { font-size: 14px; color: var(--accent-bright); font-weight: 700; }
+.progress-bar-bg { height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-bright)); border-radius: 3px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.progress-details { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+
+/* Training Plan */
+.week-selector { display: flex; gap: 10px; margin-bottom: 24px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+.week-selector::-webkit-scrollbar { display: none; }
+.week-btn { padding: 10px 20px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; transition: var(--transition); }
+.week-btn.active { background: var(--accent); color: #ffffff; border-color: var(--accent); box-shadow: 0 4px 14px rgba(252, 82, 0, 0.35); }
+
+.workout-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); transition: var(--transition); }
+.workout-card.completed { border-left: 4px solid var(--accent); opacity: 0.7; }
+.workout-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.workout-day { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.workout-type { font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.type-swim { background: var(--blue-dim); color: var(--blue); border-left-color: var(--blue) !important; }
+.type-bike { background: var(--green-dim); color: var(--green); border-left-color: var(--green) !important; }
+.type-run { background: var(--accent-dim); color: var(--accent-bright); border-left-color: var(--accent) !important; }
+.type-brick { background: var(--warning-dim); color: var(--warning); border-left-color: var(--warning) !important; }
+.type-rest { background: var(--bg-secondary); color: var(--text-dim); }
+
+.cat-badge { font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-secondary); }
+
+.workout-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.3px; }
+.workout-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px; }
+.workout-metrics { display: flex; flex-direction: column; gap: 8px; background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 16px; }
+.workout-metric { font-size: 12px; color: var(--text-dim); display: flex; justify-content: space-between; font-weight: 500; }
+.workout-metric span { color: var(--text-primary); font-weight: 600; }
+.workout-actions { display: flex; gap: 10px; }
+
+/* Form Inputs */
+.form-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 20px; box-shadow: var(--shadow); width: 100%; }
+.form-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); letter-spacing: -0.2px; }
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; width: 100%; }
+.form-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.form-group label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 14px; font-family: inherit; appearance: none; -webkit-appearance: none; transition: var(--transition); }
+.form-group input[type="color"] { padding: 4px; height: 44px; width: 100%; cursor: pointer; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.form-group textarea { resize: vertical; min-height: 80px; }
+.availability-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 8px; }
+.zone-label { font-size: 10px !important; text-align: center; }
+.zone-input { text-align: center; padding: 10px !important; }
+
+.cat-list-display { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.cat-chip { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cat-chip-color { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Mobile Calendar UI */
+.calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.calendar-title { font-size: 16px; font-weight: 700; }
+.calendar-grid { 
+    display: grid; 
+    grid-template-columns: repeat(7, minmax(0, 1fr)); 
+    gap: 2px; 
+    background: var(--bg-secondary); 
+    border-radius: var(--radius-sm); 
+    padding: 2px; 
+    width: 100%;
+}
+.calendar-day-header { text-align: center; font-size: 9px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; padding: 6px 0; }
+.calendar-day { 
+    background: var(--bg-card); 
+    min-height: 58px; 
+    border-radius: 6px; 
+    display: flex; 
+    flex-direction: column; 
+    padding: 3px; 
+    cursor: pointer; 
+    transition: var(--transition); 
+    border: 1px solid transparent; 
+    overflow: hidden;
+}
+.calendar-day:hover { background: var(--bg-card-hover); }
+.calendar-day.empty { background: transparent; cursor: default; border: none; }
+.calendar-day.today { border-color: var(--accent); }
+.calendar-day.selected { background: var(--accent-dim); border-color: var(--accent); }
+.calendar-day-num { font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; }
+.calendar-day.today .calendar-day-num { color: var(--accent-bright); }
+
+.day-events-container { display: flex; flex-direction: column; gap: 2px; overflow: hidden; width: 100%; }
+.mini-event { 
+    font-size: 8px; 
+    padding: 1px 3px; 
+    border-radius: 3px; 
+    background: var(--bg-secondary); 
+    color: var(--text-primary); 
+    text-overflow: ellipsis; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    border-left: 2px solid; 
+    font-weight: 600; 
+    line-height: 1.2;
+    width: 100%;
+}
+
+.event-list { margin-top: 20px; }
+.event-card { 
+    background: var(--bg-card); 
+    border: 1px solid var(--border); 
+    border-radius: var(--radius-sm); 
+    padding: 16px; 
+    margin-bottom: 12px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 6px; 
+    position: relative; 
+    overflow: hidden; 
+}
+.event-card-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-secondary); position: relative; z-index: 2; }
+.event-card-title { font-size: 15px; font-weight: 700; color: var(--text-primary); position: relative; z-index: 2; }
+.event-card-meta { font-size: 12px; color: var(--text-dim); position: relative; z-index: 2; }
+
+/* History */
+.history-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+.history-main { display: flex; flex-direction: column; gap: 6px; }
+.history-date { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.history-stats { font-size: 15px; font-weight: 600; }
+.history-stats span { color: var(--text-dim); font-weight: 400; font-size: 13px; margin: 0 6px; }
+.delete-btn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 8px 14px; border-radius: var(--radius-sm); text-transform: uppercase; font-weight: 700; z-index: 5; position: relative; cursor: pointer; }
+
+/* Collapsible AI Insight Styles */
+.special-info-card { background: linear-gradient(145deg, var(--accent-dim), transparent); border: 1px solid var(--accent); border-radius: var(--radius); padding: 18px; margin-bottom: 24px; position: relative; overflow: hidden; transition: var(--transition); }
+.special-info-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.special-info-title { font-size: 12px; font-weight: 700; color: var(--accent-bright); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+.special-info-title::before { content: ''; display: block; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); }
+.special-info-toggle-btn { font-size: 11px; color: var(--accent-bright); font-weight: 700; background: var(--accent-dim); padding: 4px 10px; border-radius: 12px; transition: var(--transition); }
+.special-info-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; margin-top: 12px; transition: var(--transition); }
+.special-info-card.collapsed .special-info-text { display: none; }
+
+/* Wizard Overlay */
+.wizard-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+.wizard-overlay.active { display: flex; }
+.wizard-container { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.7); }
+.wizard-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.wizard-title { font-size: 18px; font-weight: 700; }
+.wizard-progress { display: flex; gap: 4px; margin-top: 8px; }
+.wizard-dot { height: 4px; flex: 1; background: var(--bg-secondary); border-radius: 2px; }
+.wizard-dot.active { background: var(--accent); }
+.wizard-body { padding: 24px; overflow-y: auto; flex: 1; }
+.wizard-step { display: none; animation: fadeIn 0.3s; }
+.wizard-step.active { display: block; }
+.wizard-footer { padding: 20px; border-top: 1px solid var(--border); display: flex; gap: 12px; background: var(--bg-secondary); }
+
+/* General Modals */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 100%; max-width: 540px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow); position: relative; }
+.modal-close { float: right; background: none; border: none; color: var(--text-secondary); font-size: 28px; line-height: 1; cursor: pointer; }
+.modal h2 { font-size: 20px; margin-bottom: 6px; color: var(--text-primary); font-weight: 700; }
+.modal h3 { font-size: 13px; color: var(--accent-bright); font-weight: 700; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+.modal p, .modal li { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px; }
+.modal strong { color: var(--text-primary); }
+
+.exercise-term { color: var(--accent-bright); border-bottom: 1px dashed var(--accent-dim); font-weight: 600; cursor: pointer; transition: var(--transition); }
+.exercise-term:hover { background: var(--accent-dim); }
+
+/* AI Prompt */
+.prompt-box { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; margin-top: 16px; line-height: 1.5; }
+
+/* Subsections & Tabs (You & Settings) */
+.subtabs-container {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 20px;
+}
+
+.subtab-btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    transition: var(--transition);
+}
+
+.subtab-btn.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: var(--shadow);
+}
+
+/* Athlete Step Navigation */
+.athlete-step-nav {
+    display: flex;
+    gap: 6px;
+    background: var(--bg-secondary);
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+.athlete-step-pill {
+    flex: 1;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.athlete-step-pill.active {
+    background: var(--bg-card);
+    color: var(--accent-bright);
+    box-shadow: var(--shadow);
+}
+
+.athlete-step-pill.completed {
+    color: var(--text-secondary);
+}
+
+/* Color Presets */
+.color-preset-dot {
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.color-preset-dot:hover {
+    transform: scale(1.15);
+}
+
+.color-preset-dot.selected {
+    transform: scale(1.1);
+    box-shadow: 0 0 8px var(--accent);
+}
+
+/* Legal Footer */
+.app-footer {
+    max-width: 800px;
+    margin: 30px auto 10px;
+    padding: 16px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.app-footer a { color: var(--accent-bright); text-decoration: none; }
+
+/* Subtle Dev Trigger */
+.secret-dev-trigger {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border-light);
+    opacity: 0.4;
+    cursor: pointer;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: var(--transition);
+}
+.secret-dev-trigger:hover {
+    background: var(--accent);
+    opacity: 1;
+}
+
+/* Typography & Utilities */
+.section-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
+.section-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; }
+.phase-badge { display: inline-block; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; background: var(--accent-dim); color: var(--accent-bright); border: 1px solid var(--accent); }
+
+.toast { position: fixed; bottom: calc(100px + env(safe-area-inset-bottom)); left: 50%; transform: translate(-50%, 20px); background: var(--bg-card); border: 1px solid var(--accent); color: var(--text-primary); padding: 14px 24px; border-radius: 30px; font-size: 13px; font-weight: 600; z-index: 3000; opacity: 0; transition: var(--transition); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); white-space: nowrap; max-width: 90vw; }
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+.ai-tab-container { display: flex; background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 6px; margin-bottom: 20px; }
+.ai-tab { flex: 1; text-align: center; padding: 10px; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border-radius: 6px; transition: var(--transition); }
+.ai-tab.active { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow); }
+
+/* Notice Box */
+.notice-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.5;
+}
+
+.notice-box.warning {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: var(--warning-dim);
+    color: #fca5a5;
+}
+
+.notice-box.info {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: var(--blue-dim);
+    color: #93c5fd;
+}
+
+.notice-box.success {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: var(--green-dim);
+    color: #6ee7b7;
+}
+
+@media (max-width: 480px) {
+    .main { padding: 16px 10px; }
+    .form-section { padding: 14px 10px; }
+    .calendar-grid { gap: 2px; padding: 2px; }
+    .calendar-day { min-height: 52px; padding: 2px; }
+    .calendar-day-num { font-size: 10px; }
+    .calendar-day-header { font-size: 8px; padding: 4px 0; }
+    .mini-event { font-size: 7.5px; padding: 1px 2px; }
+    .stat-value { font-size: 22px; }
+}
+
+</style>
 </head>
 <body>
     <header class="header">
@@ -474,6 +1023,1803 @@
 
     <div class="toast" id="toast"></div>
 
-    <script type="module" src="./src/app.js"></script>
+    <script>
+// Supabase Configuration
+const SUPABASE_URL = "https://gslrdrpoihstzxspgagn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9t_6D9kuxVdBkp22JKQdgA_iOs7SO1Z";
+
+let supabaseClient = null;
+let currentUser = null;
+let syncStatus = 'local'; // 'local' | 'synced' | 'syncing' | 'offline' | 'error'
+let isOfflinePendingSync = false;
+let syncDebounceTimeout = null;
+
+// Initialize Supabase Client
+function initSupabase() {
+    try {
+        if (window.supabase) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true
+                }
+            });
+            setupSupabaseAuth();
+        } else {
+            console.warn("Supabase library not loaded yet.");
+        }
+    } catch(e) {
+        console.error("Supabase init error:", e);
+    }
+}
+
+// Clean Default Athlete Profile (No personal information)
+const DEFAULT_DATA = {
+    profile: {
+        age: 28,
+        event: "Half Ironman",
+        targetTime: "5:30:00",
+        raceDate: "",
+        planStartDate: new Date().toISOString().slice(0, 10),
+        currentWeek: 1,
+        hasSeenGuide: false,
+        stats: { swim: "2km in 42min", bike: "32kph flat", run: "5K in 21:00" },
+        gear: { bike: "Canyon Aeroad CF SLX", shoes: "Adidas Adizero Evo SL", watch: "Garmin Forerunner 965" },
+        limitations: "", 
+        availability: { mon: 45, tue: 60, wed: 60, thu: 60, fri: 45, sat: 180, sun: 180 }
+    },
+    runs: [],
+    customEvents: [],
+    customCategories: [], 
+    completedWorkouts: {},
+    plan: null,
+    exerciseDB: {},
+    lastModified: Date.now()
+};
+
+let appData = loadData();
+let currentPromptMode = 'initial'; 
+
+// Calendar state
+let currentDate = new Date();
+let currentMonth = currentDate.getMonth();
+let currentYear = currentDate.getFullYear();
+let selectedDateStr = new Date().toISOString().slice(0,10);
+
+// Storage Management with Cookie Fallback
+function setStorageItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch(e) {
+        document.cookie = key + "=" + encodeURIComponent(value) + "; path=/; max-age=31536000";
+    }
+}
+
+function getStorageItem(key) {
+    try {
+        const val = localStorage.getItem(key);
+        if (val) return val;
+    } catch(e) {}
+    
+    const nameEQ = key + "=";
+    const ca = document.cookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+    }
+    return null;
+}
+
+function loadData() {
+    const saved = getStorageItem('trit_data');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            return deepMerge(DEFAULT_DATA, parsed);
+        } catch(e) { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+    }
+    return JSON.parse(JSON.stringify(DEFAULT_DATA));
+}
+
+function deepMerge(target, source) {
+    if (!isObject(target) || !isObject(source)) {
+        return source !== undefined ? source : target;
+    }
+    let output = Object.assign({}, target);
+    Object.keys(source).forEach(key => {
+        if (isObject(source[key])) {
+            if (!(key in target) || !isObject(target[key])) {
+                output[key] = source[key];
+            } else {
+                output[key] = deepMerge(target[key], source[key]);
+            }
+        } else {
+            output[key] = source[key];
+        }
+    });
+    return output;
+}
+
+function isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
+
+// Save locally and trigger cloud synchronization on every interaction
+function saveData(skipCloudSync = false) { 
+    try {
+        appData.lastModified = Date.now();
+        setStorageItem('trit_data', JSON.stringify(appData)); 
+        if (!skipCloudSync) {
+            scheduleCloudSync();
+        }
+    } catch(e) {
+        console.error("Failed to save local data:", e);
+    }
+}
+
+// Auto-save on page hide/unload (Safari iOS tab closing & navigation fix)
+window.addEventListener('beforeunload', () => saveData(true));
+window.addEventListener('pagehide', () => saveData(true));
+
+// Supabase Auth and Cloud Synchronization
+async function setupSupabaseAuth() {
+    if (!supabaseClient) return;
+
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session && session.user) {
+            currentUser = session.user;
+            updateSyncStatusUI('synced');
+            updateProfileSettingsUI();
+        } else {
+            currentUser = null;
+            updateSyncStatusUI('local');
+            updateProfileSettingsUI();
+        }
+    } catch (e) {
+        console.warn("Session retrieval note:", e);
+    }
+
+    // Handle Auth state change & email confirmation redirects
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log("Auth state change:", event, session);
+        if (session && session.user) {
+            const isNewLogin = (!currentUser || currentUser.id !== session.user.id);
+            currentUser = session.user;
+            
+            if (event === 'SIGNED_IN' && isNewLogin) {
+                showToast(`Welcome, ${session.user.email}!`);
+                await handleUserLoginSync();
+            } else if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+                updateSyncStatusUI('synced');
+            }
+            updateProfileSettingsUI();
+        } else {
+            currentUser = null;
+            updateSyncStatusUI('local');
+            updateProfileSettingsUI();
+        }
+    });
+
+    // Check URL parameters for confirmation flags
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+        showToast("Email confirmed! Connected to Supabase.");
+    }
+}
+
+// When logging in: Fetch user state from table "user_data", overwrite local state
+async function handleUserLoginSync() {
+    if (!supabaseClient || !currentUser) return;
+    updateSyncStatusUI('syncing');
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('user_data')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Error fetching user data:", error);
+            // If table does not exist or empty, push existing local data to cloud
+            await syncToSupabase();
+            return;
+        }
+
+        if (data && (data.data || data.payload)) {
+            const remoteData = data.data || data.payload;
+            appData = deepMerge(DEFAULT_DATA, remoteData);
+            setStorageItem('trit_data', JSON.stringify(appData));
+            showToast("Cloud profile & data synchronized!");
+            renderAllPages();
+            updateSyncStatusUI('synced');
+        } else {
+            // First time login with no existing remote state: upload local data
+            await syncToSupabase();
+        }
+    } catch (e) {
+        console.error("Error during login sync:", e);
+        updateSyncStatusUI('error');
+    }
+}
+
+// Schedule debounced cloud sync
+function scheduleCloudSync() {
+    if (!supabaseClient || !currentUser) {
+        updateSyncStatusUI('local');
+        return;
+    }
+
+    if (!navigator.onLine) {
+        isOfflinePendingSync = true;
+        updateSyncStatusUI('offline');
+        return;
+    }
+
+    updateSyncStatusUI('syncing');
+    if (syncDebounceTimeout) clearTimeout(syncDebounceTimeout);
+    
+    syncDebounceTimeout = setTimeout(async () => {
+        await syncToSupabase();
+    }, 600);
+}
+
+// Upsert state to table "user_data" under user_id
+async function syncToSupabase() {
+    if (!supabaseClient || !currentUser) return;
+
+    if (!navigator.onLine) {
+        isOfflinePendingSync = true;
+        updateSyncStatusUI('offline');
+        return;
+    }
+
+    try {
+        const payload = {
+            user_id: currentUser.id,
+            data: appData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { error } = await supabaseClient
+            .from('user_data')
+            .upsert(payload, { onConflict: 'user_id' });
+
+        if (error) {
+            console.warn("Supabase upsert note:", error.message);
+            updateSyncStatusUI('error');
+        } else {
+            isOfflinePendingSync = false;
+            updateSyncStatusUI('synced');
+        }
+    } catch (e) {
+        console.error("Sync error:", e);
+        updateSyncStatusUI('error');
+    }
+}
+
+// Online / Offline Listeners
+window.addEventListener('online', () => {
+    showToast("Reconnected to internet.");
+    if (isOfflinePendingSync && currentUser) {
+        syncToSupabase();
+    } else if (currentUser) {
+        updateSyncStatusUI('synced');
+    } else {
+        updateSyncStatusUI('local');
+    }
+});
+
+window.addEventListener('offline', () => {
+    isOfflinePendingSync = true;
+    updateSyncStatusUI('offline');
+    showToast("Offline: changes will sync when reconnected.");
+});
+
+function updateSyncStatusUI(status) {
+    syncStatus = status;
+    const dot = document.getElementById('syncDot');
+    const label = document.getElementById('syncLabel');
+    if (!dot || !label) return;
+
+    dot.className = 'sync-dot ' + status;
+    if (status === 'synced') {
+        label.textContent = 'Cloud Synced';
+    } else if (status === 'syncing') {
+        label.textContent = 'Syncing...';
+    } else if (status === 'offline') {
+        label.textContent = 'Offline (Local)';
+    } else if (status === 'error') {
+        label.textContent = 'Sync Issue';
+    } else {
+        label.textContent = 'Local Mode';
+    }
+}
+
+// Auth Actions: Sign In, Sign Up, Sign Out
+async function authSignUp(email, password) {
+    if (!supabaseClient) {
+        showToast("Supabase client not ready.");
+        return;
+    }
+    if (!email || !password) {
+        showToast("Please enter both email and password.");
+        return;
+    }
+
+    const authMsg = document.getElementById('authNoticeBox');
+    if (authMsg) {
+        authMsg.className = 'notice-box info';
+        authMsg.innerHTML = 'Sending confirmation email...';
+        authMsg.style.display = 'flex';
+    }
+
+    try {
+        const { data, error } = await supabaseClient.auth.signUp({
+            email: email.trim(),
+            password: password,
+            options: {
+                emailRedirectTo: window.location.origin
+            }
+        });
+
+        if (error) {
+            if (authMsg) {
+                authMsg.className = 'notice-box warning';
+                authMsg.innerHTML = `<strong>Registration failed:</strong> ${error.message}`;
+            }
+            showToast(error.message);
+            return;
+        }
+
+        if (authMsg) {
+            authMsg.className = 'notice-box success';
+            authMsg.innerHTML = `<strong>Registration successful!</strong> Please check your email (<strong>${email}</strong>) for a confirmation link before logging in.`;
+        }
+        showToast("Check your email for confirmation link!");
+
+        // If auto-logged in (session returned immediately), push local data to Supabase
+        if (data && data.session) {
+            currentUser = data.session.user;
+            await syncToSupabase();
+            updateProfileSettingsUI();
+        }
+    } catch (e) {
+        if (authMsg) {
+            authMsg.className = 'notice-box warning';
+            authMsg.textContent = e.message || 'Error creating account';
+        }
+    }
+}
+
+async function authSignIn(email, password) {
+    if (!supabaseClient) {
+        showToast("Supabase client not ready.");
+        return;
+    }
+    if (!email || !password) {
+        showToast("Please enter email and password.");
+        return;
+    }
+
+    const authMsg = document.getElementById('authNoticeBox');
+    if (authMsg) {
+        authMsg.className = 'notice-box info';
+        authMsg.textContent = 'Signing in...';
+        authMsg.style.display = 'flex';
+    }
+
+    try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: email.trim(),
+            password: password
+        });
+
+        if (error) {
+            if (authMsg) {
+                authMsg.className = 'notice-box warning';
+                authMsg.innerHTML = `<strong>Sign In failed:</strong> ${error.message}`;
+            }
+            showToast(error.message);
+            return;
+        }
+
+        if (authMsg) {
+            authMsg.className = 'notice-box success';
+            authMsg.textContent = "Signed in successfully!";
+        }
+        currentUser = data.user;
+        await handleUserLoginSync();
+        updateProfileSettingsUI();
+        showToast("Logged in successfully!");
+    } catch (e) {
+        if (authMsg) {
+            authMsg.className = 'notice-box warning';
+            authMsg.textContent = e.message || 'Login error';
+        }
+    }
+}
+
+async function authSignOut() {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.auth.signOut();
+        currentUser = null;
+        updateSyncStatusUI('local');
+        updateProfileSettingsUI();
+        showToast("Logged out. Switched to Local Mode.");
+    } catch (e) {
+        console.error("Sign out error:", e);
+    }
+}
+
+async function deleteCloudAccountData() {
+    if (!currentUser || !supabaseClient) {
+        showToast("You are not logged in.");
+        return;
+    }
+
+    const confirm1 = confirm("Are you sure you want to delete all your cloud data from Supabase? This will wipe your saved plans and logs from the cloud database.");
+    if (!confirm1) return;
+
+    try {
+        updateSyncStatusUI('syncing');
+        const { error } = await supabaseClient
+            .from('user_data')
+            .delete()
+            .eq('user_id', currentUser.id);
+
+        if (error) {
+            console.warn("Delete note:", error.message);
+        }
+
+        await supabaseClient.auth.signOut();
+        currentUser = null;
+        updateSyncStatusUI('local');
+        updateProfileSettingsUI();
+        showToast("Cloud account data deleted and signed out.");
+    } catch(e) {
+        showToast("Error deleting cloud data: " + e.message);
+    }
+}
+
+// Core Initialization
+document.addEventListener('DOMContentLoaded', () => {
+    initSupabase();
+    renderDashboard();
+    if (!appData.profile.hasSeenGuide) {
+        openGuide();
+        appData.profile.hasSeenGuide = true;
+        saveData();
+    }
+    const evDateEl = document.getElementById('evDate');
+    if (evDateEl) evDateEl.value = new Date().toISOString().slice(0,10);
+    renderCalendar();
+    renderSavedCategories();
+});
+
+function renderAllPages() {
+    renderDashboard();
+    renderPlan();
+    renderCalendar();
+    renderHistory();
+    renderSavedCategories();
+}
+
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    
+    const targetPage = document.getElementById('page-' + pageId);
+    if (targetPage) targetPage.classList.add('active');
+    
+    if (['dashboard', 'plan', 'calendar', 'history', 'prompt'].includes(pageId)) {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            if(btn.textContent.trim().toLowerCase().includes(pageId) || (pageId === 'prompt' && btn.textContent.trim().includes('AI'))) {
+                btn.classList.add('active');
+            }
+        });
+    }
+
+    if (pageId === 'dashboard') renderDashboard();
+    if (pageId === 'plan') renderPlan();
+    if (pageId === 'calendar') renderCalendar();
+    if (pageId === 'history') renderHistory();
+}
+
+// Profile Section with "You" and "Settings" Subsections
+let currentProfileSubtab = 'you';
+
+function openProfileModal(subtab = 'you') {
+    currentProfileSubtab = subtab;
+    populateProfileForm();
+    updateProfileSettingsUI();
+    switchProfileSubtab(subtab);
+    document.getElementById('profileModal').classList.add('active');
+}
+
+function closeProfileModal() {
+    document.getElementById('profileModal').classList.remove('active');
+}
+
+function switchProfileSubtab(tab) {
+    currentProfileSubtab = tab;
+    document.getElementById('subtabYou').classList.toggle('active', tab === 'you');
+    document.getElementById('subtabSettings').classList.toggle('active', tab === 'settings');
+    document.getElementById('profileSectionYou').style.display = tab === 'you' ? 'block' : 'none';
+    document.getElementById('profileSectionSettings').style.display = tab === 'settings' ? 'block' : 'none';
+}
+
+let currentAthleteStep = 1;
+
+function setAthleteStep(step) {
+    currentAthleteStep = Math.max(1, Math.min(4, step));
+    for (let i = 1; i <= 4; i++) {
+        const pill = document.getElementById(`athStepPill${i}`);
+        const content = document.getElementById(`athStepContent${i}`);
+        if (pill) {
+            pill.classList.toggle('active', i === currentAthleteStep);
+            pill.classList.toggle('completed', i < currentAthleteStep);
+        }
+        if (content) {
+            content.style.display = (i === currentAthleteStep) ? 'block' : 'none';
+        }
+    }
+
+    const btnPrev = document.getElementById('athBtnPrev');
+    const btnSkip = document.getElementById('athBtnSkip');
+    const btnNext = document.getElementById('athBtnNext');
+
+    if (btnPrev) btnPrev.style.display = currentAthleteStep > 1 ? 'block' : 'none';
+    if (btnSkip) btnSkip.style.display = currentAthleteStep < 4 ? 'block' : 'none';
+    if (btnNext) {
+        btnNext.textContent = currentAthleteStep === 4 ? 'Save Profile' : 'Next';
+    }
+}
+
+function athleteWizardNext() {
+    saveProfileDataStep();
+    if (currentAthleteStep < 4) {
+        setAthleteStep(currentAthleteStep + 1);
+    } else {
+        saveProfileForm();
+        closeProfileModal();
+    }
+}
+
+function athleteWizardPrev() {
+    saveProfileDataStep();
+    if (currentAthleteStep > 1) {
+        setAthleteStep(currentAthleteStep - 1);
+    }
+}
+
+function athleteWizardSkip() {
+    saveProfileDataStep();
+    if (currentAthleteStep < 4) {
+        setAthleteStep(currentAthleteStep + 1);
+    } else {
+        saveProfileForm();
+        closeProfileModal();
+    }
+}
+
+function saveProfileDataStep() {
+    const p = appData.profile;
+    const ageEl = document.getElementById('pAge');
+    if (ageEl) p.age = parseInt(ageEl.value) || 28;
+    const evEl = document.getElementById('pEvent');
+    if (evEl) p.event = evEl.value || "Half Ironman";
+    const ttEl = document.getElementById('pTargetTime');
+    if (ttEl) p.targetTime = ttEl.value || "5:30:00";
+    const sdEl = document.getElementById('pPlanStartDate');
+    if (sdEl) p.planStartDate = sdEl.value || new Date().toISOString().slice(0,10);
+    const rdEl = document.getElementById('pRaceDate');
+    if (rdEl) p.raceDate = rdEl.value || "";
+
+    const swimEl = document.getElementById('pSwim');
+    if (swimEl) p.stats.swim = swimEl.value;
+    const bikeEl = document.getElementById('pBike');
+    if (bikeEl) p.stats.bike = bikeEl.value;
+    const runEl = document.getElementById('pRun');
+    if (runEl) p.stats.run = runEl.value;
+
+    const gBikeEl = document.getElementById('pGearBike');
+    if (gBikeEl) p.gear.bike = gBikeEl.value;
+    const gShoesEl = document.getElementById('pGearShoes');
+    if (gShoesEl) p.gear.shoes = gShoesEl.value;
+    const gWatchEl = document.getElementById('pGearWatch');
+    if (gWatchEl) p.gear.watch = gWatchEl.value;
+    const limEl = document.getElementById('pLimitations');
+    if (limEl) p.limitations = limEl.value;
+
+    if (!p.availability) p.availability = {};
+    ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
+        const el = document.getElementById('p' + d.charAt(0).toUpperCase() + d.slice(1));
+        if (el) p.availability[d] = parseInt(el.value) || 0;
+    });
+
+    saveData();
+}
+
+function populateProfileForm() {
+    const p = appData.profile;
+    const ageEl = document.getElementById('pAge');
+    if (ageEl) ageEl.value = p.age || 28;
+    const evEl = document.getElementById('pEvent');
+    if (evEl) evEl.value = p.event || "Half Ironman";
+    const ttEl = document.getElementById('pTargetTime');
+    if (ttEl) ttEl.value = p.targetTime || "5:30:00";
+    const sdEl = document.getElementById('pPlanStartDate');
+    if (sdEl) sdEl.value = p.planStartDate || new Date().toISOString().slice(0,10);
+    const rdEl = document.getElementById('pRaceDate');
+    if (rdEl) rdEl.value = p.raceDate || "";
+
+    const swimEl = document.getElementById('pSwim');
+    if (swimEl) swimEl.value = p.stats.swim || "";
+    const bikeEl = document.getElementById('pBike');
+    if (bikeEl) bikeEl.value = p.stats.bike || "";
+    const runEl = document.getElementById('pRun');
+    if (runEl) runEl.value = p.stats.run || "";
+
+    const gBikeEl = document.getElementById('pGearBike');
+    if (gBikeEl) gBikeEl.value = p.gear.bike || "Canyon Aeroad CF SLX";
+    const gShoesEl = document.getElementById('pGearShoes');
+    if (gShoesEl) gShoesEl.value = p.gear.shoes || "Adidas Adizero Evo SL";
+    const gWatchEl = document.getElementById('pGearWatch');
+    if (gWatchEl) gWatchEl.value = p.gear.watch || "Garmin Forerunner 965";
+    const limEl = document.getElementById('pLimitations');
+    if (limEl) limEl.value = p.limitations || "";
+
+    const a = p.availability;
+    ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
+        const el = document.getElementById('p' + d.charAt(0).toUpperCase() + d.slice(1));
+        if (el) el.value = (a && a[d] !== undefined) ? a[d] : 60;
+    });
+
+    setAthleteStep(1);
+    calculateWeeksTillRaceUI();
+}
+
+function saveProfileForm() {
+    saveProfileDataStep();
+    showToast("Profile updated!");
+    renderDashboard();
+    renderPlan();
+    calculateWeeksTillRaceUI();
+}
+
+// Calculate weeks until race and generate countdown training plan
+function calculateWeeksTillRaceUI() {
+    const raceDateEl = document.getElementById('pRaceDate');
+    const raceDateVal = raceDateEl ? raceDateEl.value : appData.profile.raceDate;
+    const raceInfoBox = document.getElementById('raceCalculationBox');
+    if (!raceInfoBox) return;
+
+    if (!raceDateVal) {
+        raceInfoBox.innerHTML = `
+            <div style="font-size:12px; color:var(--text-dim);">
+                Set your race date above to calculate exact training weeks and generate a tailored plan leading up to race day.
+            </div>
+        `;
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const race = new Date(raceDateVal);
+    race.setHours(0,0,0,0);
+
+    const diffTime = race.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 0) {
+        raceInfoBox.innerHTML = `
+            <div style="font-size:12px; color:var(--warning);">
+                Race date has passed or is today! Please select a future date.
+            </div>
+        `;
+        return;
+    }
+
+    const weeksTillRace = Math.max(1, Math.ceil(diffDays / 7));
+    raceInfoBox.innerHTML = `
+        <div style="background:var(--bg-secondary); border:1px solid var(--accent); border-radius:var(--radius-sm); padding:14px; margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-weight:700; color:var(--text-primary); font-size:14px;">🏁 Race Countdown</span>
+                <span style="background:var(--accent-dim); color:var(--accent-bright); font-weight:700; padding:3px 8px; border-radius:6px; font-size:12px;">${weeksTillRace} Weeks (${diffDays} Days)</span>
+            </div>
+            <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px; line-height:1.5;">
+                We can generate a customized <strong>${weeksTillRace}-week training periodization</strong> ending right at your race, with tailored Base, Build, Peak, and Taper phases!
+            </p>
+            <button class="btn btn-accent" style="width:100%; font-size:13px; padding:10px;" onclick="generatePlanTillRace(${weeksTillRace})">
+                Generate ${weeksTillRace}-Week Plan Till Race
+            </button>
+        </div>
+    `;
+}
+
+function generatePlanTillRace(weeks) {
+    saveProfileForm();
+    closeProfileModal();
+    showPage('prompt');
+    switchAITab('initial');
+    generatePromptForWeeks(weeks);
+    showToast(`AI prompt configured for ${weeks}-week countdown to race!`);
+}
+
+// Update Settings subsection UI (Login / Logout / Sync status / Legal)
+function updateProfileSettingsUI() {
+    const loggedInView = document.getElementById('settingsLoggedInView');
+    const loggedOutView = document.getElementById('settingsLoggedOutView');
+    const userEmailSpan = document.getElementById('settingsUserEmail');
+    const localModeNotice = document.getElementById('settingsLocalNotice');
+
+    if (currentUser) {
+        if (loggedInView) loggedInView.style.display = 'block';
+        if (loggedOutView) loggedOutView.style.display = 'none';
+        if (userEmailSpan) userEmailSpan.textContent = currentUser.email;
+        if (localModeNotice) localModeNotice.style.display = 'none';
+    } else {
+        if (loggedInView) loggedInView.style.display = 'none';
+        if (loggedOutView) loggedOutView.style.display = 'block';
+        if (localModeNotice) localModeNotice.style.display = 'flex';
+    }
+}
+
+// Developer Access via Dedicated Modal (Fully functional on mobile & touch devices)
+function promptDeveloperAccess() {
+    closeModal('guideModal');
+    closeProfileModal();
+    const err = document.getElementById('devPasswordError');
+    if (err) err.style.display = 'none';
+    const input = document.getElementById('devPasswordInput');
+    if (input) input.value = '';
+    document.getElementById('devPasswordModal').classList.add('active');
+    setTimeout(() => { if (input) input.focus(); }, 150);
+}
+
+function submitDeveloperPassword() {
+    const input = document.getElementById('devPasswordInput');
+    const pwd = input ? input.value.trim() : '';
+    if (pwd === "Hello123") {
+        closeModal('devPasswordModal');
+        openDataModal();
+        showToast("Developer access granted!");
+    } else {
+        const err = document.getElementById('devPasswordError');
+        if (err) err.style.display = 'block';
+    }
+}
+
+// Legal Policies & Disclaimers Modal
+function openLegalModal() {
+    document.getElementById('legalModal').classList.add('active');
+}
+
+// Motivational Quote Helper (Single quote per day fix)
+function getTodayQuote(rawQuote) {
+    if (!rawQuote || typeof rawQuote !== 'string') return "Consistency beats intensity. Keep pushing forward!";
+
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const todayName = days[new Date().getDay()];
+
+    if (rawQuote.includes('|')) {
+        const quotes = rawQuote.split('|').map(q => q.trim());
+        const match = quotes.find(q => q.toLowerCase().includes(todayName.toLowerCase()));
+        if (match) {
+            return match.replace(new RegExp(`^${todayName}:?\\s*`, 'i'), '').replace(/^"|"$/g, '');
+        }
+        const dayIdx = new Date().getDay();
+        return (quotes[dayIdx] || quotes[0]).replace(/^[A-Za-z]+:\s*/, '').replace(/^"|"$/g, '');
+    }
+
+    const dayRegex = new RegExp(`(?:${todayName}|${todayName.slice(0,3)})\\s*:\\s*([^.|\\n]+(?=[\\s.]*(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sun|Mon|Tue|Wed|Thu|Fri|Sat)|$))`, 'i');
+    const match = rawQuote.match(dayRegex);
+    if (match && match[1]) {
+        return match[1].trim().replace(/^"|"$/g, '');
+    }
+
+    const fallBackRegex = new RegExp(`${todayName}[^:]*:\\s*([^"|\\n]+)`, 'i');
+    const fbMatch = rawQuote.match(fallBackRegex);
+    if (fbMatch && fbMatch[1]) {
+        return fbMatch[1].split('.')[0].trim().replace(/^"|"$/g, '');
+    }
+
+    return rawQuote.replace(/^"|"$/g, '').trim();
+}
+
+// Data Modal (Dev only)
+function openDataModal() {
+    const saved = getStorageItem('trit_data') || JSON.stringify(appData);
+    const bytes = new Blob([saved]).size;
+    const kb = (bytes / 1024).toFixed(2);
+    
+    document.getElementById('storageStatus').textContent = `Key: 'trit_data' (${kb} KB stored locally) | Mode: ${currentUser ? 'Cloud (Supabase)' : 'Local'}`;
+    document.getElementById('storageInspectBox').textContent = JSON.stringify(appData, null, 2);
+    document.getElementById('dataModal').classList.add('active');
+}
+
+function exportDataJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `trit_data_backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    showToast('JSON backup exported!');
+}
+
+function copyDataJSON() {
+    const jsonStr = JSON.stringify(appData, null, 2);
+    navigator.clipboard.writeText(jsonStr).then(() => showToast('Data copied to clipboard!')).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = jsonStr;
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        showToast('Data copied to clipboard!');
+    });
+}
+
+function importDataJSON() {
+    const input = document.getElementById('importJsonInput').value.trim();
+    if (!input) { showToast('Paste JSON backup first'); return; }
+    try {
+        const parsed = JSON.parse(input);
+        appData = deepMerge(DEFAULT_DATA, parsed);
+        saveData();
+        showToast('Data restored successfully!');
+        document.getElementById('importJsonInput').value = '';
+        closeModal('dataModal');
+        renderDashboard();
+        if (document.getElementById('page-plan').classList.contains('active')) renderPlan();
+    } catch(e) {
+        showToast('Invalid JSON data format');
+    }
+}
+
+function resetLocalStorage() {
+    if (confirm('Are you sure you want to reset all local storage data? This cannot be undone.')) {
+        if (confirm('Final Warning: All logged activities, plans, and events will be erased!')) {
+            try { localStorage.removeItem('trit_data'); } catch(e) {}
+            document.cookie = "trit_data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            appData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            saveData();
+            showToast('Local Storage reset complete!');
+            closeModal('dataModal');
+            renderDashboard();
+            location.reload();
+        }
+    }
+}
+
+// Dashboard
+function renderDashboard() {
+    const p = appData.profile;
+    document.getElementById('dashTargetSub').textContent = `Target: ${p.event} in ${p.targetTime}`;
+    
+    if (appData.plan && appData.plan.motivationalQuote) {
+        document.getElementById('dashQuote').textContent = `"${getTodayQuote(appData.plan.motivationalQuote)}"`;
+    } else {
+        document.getElementById('dashQuote').textContent = `"Consistency beats intensity. Keep pushing forward!"`;
+    }
+    
+    const runs = appData.runs;
+    const runDist = runs.filter(r=>r.type==='Run').reduce((s, r) => s + (r.distance || 0), 0);
+    const bikeDist = runs.filter(r=>r.type==='Bike').reduce((s, r) => s + (r.distance || 0), 0);
+    const swimDist = runs.filter(r=>r.type==='Swim').reduce((s, r) => s + (r.distance || 0), 0);
+    const totalHours = runs.reduce((s, r) => s + (r.duration || 0), 0) / 60;
+
+    const completedCount = Object.keys(appData.completedWorkouts).length;
+    const totalWorkouts = (appData.plan && appData.plan.weeks) ? appData.plan.weeks.reduce((s, w) => s + w.workouts.length, 0) : 0;
+    
+    const totalVol = runDist + bikeDist + swimDist;
+    let runPct = totalVol ? (runDist/totalVol)*100 : 33.3;
+    let bikePct = totalVol ? (bikeDist/totalVol)*100 : 33.3;
+    let swimPct = totalVol ? (swimDist/totalVol)*100 : 33.3;
+
+    document.getElementById('dashboardStats').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-label">Run Vol</div>
+            <div class="stat-value">${runDist.toFixed(1)} km</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Bike Vol</div>
+            <div class="stat-value">${bikeDist.toFixed(0)} km</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Swim Vol</div>
+            <div class="stat-value">${swimDist.toFixed(1)} km</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Time</div>
+            <div class="stat-value">${totalHours.toFixed(1)} h</div>
+        </div>
+        <div class="stat-card volume-chart-card" style="grid-column: 1 / -1; padding-bottom: 16px;">
+            <div class="stat-label">Volume Breakdown</div>
+            <div style="display:flex; height:10px; border-radius:5px; overflow:hidden; margin-top:12px;">
+                <div style="background:var(--accent); width:${runPct}%; transition: var(--transition);"></div>
+                <div style="background:var(--green); width:${bikePct}%; transition: var(--transition);"></div>
+                <div style="background:var(--blue); width:${swimPct}%; transition: var(--transition);"></div>
+            </div>
+            <div style="display:flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size:11px; margin-top:8px; color:var(--text-dim); font-weight: 600;">
+                <span style="color:var(--accent-bright)">Run ${Math.round(runPct)}%</span>
+                <span style="color:var(--green)">Bike ${Math.round(bikePct)}%</span>
+                <span style="color:var(--blue)">Swim ${Math.round(swimPct)}%</span>
+            </div>
+        </div>
+    `;
+    
+    const pct = totalWorkouts ? Math.round((completedCount / totalWorkouts) * 100) : 0;
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressWeek').textContent = `Week ${p.currentWeek}`;
+    document.getElementById('progressWorkouts').textContent = `${completedCount}/${totalWorkouts} done`;
+}
+
+// Calendar System
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    if (!grid) return;
+    grid.innerHTML = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<div class="calendar-day-header">${d}</div>`).join('');
+    
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    document.getElementById('calendarMonthYear').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const offset = firstDay === 0 ? 6 : firstDay - 1; 
+
+    for (let i = 0; i < offset; i++) {
+        grid.innerHTML += `<div class="calendar-day empty"></div>`;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    for (let i = 1; i <= daysInMonth; i++) {
+        const dateObj = new Date(Date.UTC(currentYear, currentMonth, i));
+        const dateStr = dateObj.toISOString().slice(0, 10);
+        
+        let classes = 'calendar-day';
+        if (dateStr === todayStr) classes += ' today';
+        if (dateStr === selectedDateStr) classes += ' selected';
+
+        const customEvents = appData.customEvents.filter(e => e.date === dateStr);
+        const planWorkouts = getPlanWorkoutsForDate(dateStr);
+        
+        let eventHTML = '';
+        
+        planWorkouts.forEach(w => {
+            let typeColor = 'var(--accent)';
+            if(w.type.toLowerCase().includes('bike')) typeColor = 'var(--green)';
+            if(w.type.toLowerCase().includes('swim')) typeColor = 'var(--blue)';
+            eventHTML += `<div class="mini-event" style="border-left-color: ${typeColor}">${w.type}</div>`;
+        });
+
+        customEvents.forEach(e => {
+            eventHTML += `<div class="mini-event" style="border-left-color: ${e.color}">${e.title}</div>`;
+        });
+
+        grid.innerHTML += `
+            <div class="${classes}" onclick="selectCalendarDate('${dateStr}')">
+                <span class="calendar-day-num">${i}</span>
+                <div class="day-events-container">${eventHTML}</div>
+            </div>
+        `;
+    }
+    updateSelectedEventsList();
+}
+
+function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    renderCalendar();
+}
+
+function selectCalendarDate(dateStr) {
+    selectedDateStr = dateStr;
+    renderCalendar();
+}
+
+function renderSavedCategories() {
+    const list = document.getElementById('savedCategoriesList');
+    if (!list) return;
+    if(!appData.customCategories) appData.customCategories = [];
+    list.innerHTML = appData.customCategories.map(c => 
+        `<div class="cat-chip" onclick="applyCategory('${c.name}', '${c.color}')">
+            <div class="cat-chip-color" style="background:${c.color}"></div>${c.name}
+        </div>`
+    ).join('');
+}
+
+let currentEventColor = '#ff6b35';
+
+function selectWizardColor(hex) {
+    currentEventColor = hex;
+    const prev = document.getElementById('wizardColorPreview');
+    if (prev) prev.style.background = hex;
+    document.querySelectorAll('.color-preset-dot').forEach(dot => {
+        const isMatch = dot.getAttribute('data-hex') === hex;
+        dot.style.borderColor = isMatch ? 'var(--text-primary)' : 'transparent';
+    });
+}
+
+function startCustomEventWizard(prefillDate = '') {
+    currentEventColor = '#fc5200';
+    const eventData = {
+        title: '',
+        category: '',
+        color: currentEventColor,
+        date: prefillDate || selectedDateStr || new Date().toISOString().slice(0, 10),
+        time: '',
+        place: '',
+        details: ''
+    };
+
+    const colorPresets = [
+        { name: 'Strava Orange', hex: '#fc5200' },
+        { name: 'Electric Blue', hex: '#3b82f6' },
+        { name: 'Emerald', hex: '#10b981' },
+        { name: 'Purple', hex: '#8b5cf6' },
+        { name: 'Rose', hex: '#f43f5e' },
+        { name: 'Amber', hex: '#f59e0b' },
+        { name: 'Cyan', hex: '#06b6d4' }
+    ];
+
+    openWizard('Add Custom Event', [
+        {
+            title: 'Step 1: Event & Category',
+            canSkip: false,
+            html: `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Event Title *</label>
+                    <input type="text" id="wzEvTitle" placeholder="e.g. Physical Therapy, Race Registration, Rest Day..." autofocus>
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Category (Max 10)</label>
+                    <input type="text" id="wzEvCat" placeholder="e.g. Health, Race, Work, Personal..." autocomplete="off">
+                    ${appData.customCategories && appData.customCategories.length > 0 ? `
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+                            ${appData.customCategories.map(c => `
+                                <button type="button" class="cat-chip" style="cursor:pointer; border:1px solid var(--border);" onclick="document.getElementById('wzEvCat').value='${c.name}'; selectWizardColor('${c.color}');">
+                                    <div class="cat-chip-color" style="background:${c.color}"></div>${c.name}
+                                </button>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="form-group">
+                    <label style="margin-bottom:8px; display:block;">Color</label>
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        ${colorPresets.map(c => `
+                            <div class="color-preset-dot" 
+                                 data-hex="${c.hex}" 
+                                 style="width:30px; height:30px; border-radius:50%; background:${c.hex}; cursor:pointer; border:2px solid ${c.hex === '#fc5200' ? 'var(--text-primary)' : 'transparent'}; transition: transform 0.15s;" 
+                                 onclick="selectWizardColor('${c.hex}')" title="${c.name}">
+                            </div>
+                        `).join('')}
+                        <div style="position:relative; width:30px; height:30px; border-radius:50%; overflow:hidden; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; background:var(--bg-secondary); cursor:pointer;" title="Custom Color">
+                            <input type="color" id="wizardCustomColor" value="${currentEventColor}" style="position:absolute; top:-10px; left:-10px; width:60px; height:60px; opacity:0; cursor:pointer;" onchange="selectWizardColor(this.value)">
+                            <div id="wizardColorPreview" style="width:100%; height:100%; background:${currentEventColor};"></div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            onSave: () => {
+                const titleEl = document.getElementById('wzEvTitle');
+                const catEl = document.getElementById('wzEvCat');
+                const title = titleEl ? titleEl.value.trim() : '';
+                if (!title) {
+                    showToast('Please enter an event title');
+                    if (titleEl) titleEl.focus();
+                    return false;
+                }
+                eventData.title = title;
+                eventData.category = (catEl && catEl.value.trim()) ? catEl.value.trim() : 'General';
+                eventData.color = currentEventColor;
+                return true;
+            }
+        },
+        {
+            title: 'Step 2: Date & Time',
+            canSkip: true,
+            html: `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Event Date</label>
+                    <input type="date" id="wzEvDate" value="${eventData.date}">
+                </div>
+                <div class="form-group">
+                    <label>Time (Optional)</label>
+                    <input type="time" id="wzEvTime" value="${eventData.time}">
+                </div>
+            `,
+            onSave: () => {
+                const dateEl = document.getElementById('wzEvDate');
+                const timeEl = document.getElementById('wzEvTime');
+                if (dateEl && dateEl.value) eventData.date = dateEl.value;
+                if (timeEl) eventData.time = timeEl.value;
+                return true;
+            }
+        },
+        {
+            title: 'Step 3: Location & Details',
+            canSkip: true,
+            html: `
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Location / Place (Optional)</label>
+                    <input type="text" id="wzEvPlace" placeholder="e.g. Track, Office, Hospital, Virtual..." value="${eventData.place}">
+                </div>
+                <div class="form-group">
+                    <label>Notes / Preparation (Optional)</label>
+                    <textarea id="wzEvDetails" placeholder="Add preparation notes, reminders, or goals...">${eventData.details}</textarea>
+                </div>
+            `,
+            onSave: () => {
+                const placeEl = document.getElementById('wzEvPlace');
+                const detailsEl = document.getElementById('wzEvDetails');
+                if (placeEl) eventData.place = placeEl.value.trim();
+                if (detailsEl) eventData.details = detailsEl.value.trim();
+                return true;
+            }
+        }
+    ], () => {
+        if (!appData.customCategories) appData.customCategories = [];
+        const catName = eventData.category || 'General';
+        const existingCat = appData.customCategories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+        if (!existingCat) {
+            if (appData.customCategories.length < 10) {
+                appData.customCategories.push({ name: catName, color: eventData.color });
+            }
+        } else {
+            existingCat.color = eventData.color;
+        }
+
+        appData.customEvents.push({
+            id: Date.now(),
+            title: eventData.title,
+            category: catName,
+            color: eventData.color,
+            date: eventData.date,
+            time: eventData.time,
+            location: eventData.place,
+            details: eventData.details
+        });
+
+        saveData();
+        renderSavedCategories();
+        selectCalendarDate(eventData.date);
+        showToast("Event added to calendar!");
+    });
+}
+
+function applyCategory(name, color) {
+    if (name) {
+        startCustomEventWizard();
+        setTimeout(() => {
+            const catEl = document.getElementById('wzEvCat');
+            if (catEl) catEl.value = name;
+            selectWizardColor(color);
+        }, 100);
+    }
+}
+
+function saveCustomEvent() {
+    startCustomEventWizard();
+}
+
+function deleteCustomEvent(id) {
+    appData.customEvents = appData.customEvents.filter(e => e.id !== id);
+    saveData();
+    renderCalendar();
+    showToast("Event removed.");
+}
+
+function updateSelectedEventsList() {
+    const list = document.getElementById('calendarSelectedEvents');
+    if (!list) return;
+    const custom = appData.customEvents.filter(e => e.date === selectedDateStr);
+    const planWorkouts = getPlanWorkoutsForDate(selectedDateStr);
+
+    if(custom.length === 0 && planWorkouts.length === 0) {
+        list.innerHTML = `
+            <div style="text-align:center; padding: 24px 16px; background:var(--bg-secondary); border-radius:var(--radius-sm); border:1px dashed var(--border);">
+                <p style="color:var(--text-secondary); font-size:13px; margin-bottom:12px;">No activities scheduled for ${selectedDateStr}.</p>
+                <button class="btn btn-outline" onclick="startCustomEventWizard('${selectedDateStr}')" style="font-size:12px; padding:8px 16px;">+ Add Event for this Date</button>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    
+    planWorkouts.forEach(w => {
+        let typeColor = 'var(--accent)';
+        if(w.type.toLowerCase().includes('bike')) typeColor = 'var(--green)';
+        if(w.type.toLowerCase().includes('swim')) typeColor = 'var(--blue)';
+
+        html += `
+        <div class="event-card">
+            <div style="position: absolute; top: 0; right: 0; width: 80px; height: 80px; background: radial-gradient(circle, ${typeColor}30 0%, transparent 70%); border-radius: 50%; transform: translate(30%, -30%); pointer-events: none; z-index: 1;"></div>
+            <div class="event-card-header">
+                <span>AI Plan • Week ${w.weekNum}</span>
+                <span class="workout-type type-${w.type.toLowerCase()}">${w.type}</span>
+            </div>
+            <div class="event-card-title">${w.title}</div>
+            <div class="event-card-meta">${w.distance || ''} ${w.duration ? '• '+w.duration : ''}</div>
+            <button class="btn btn-outline" style="margin-top:10px; font-size:11px; padding:6px; position:relative; z-index:5;" onclick="showPage('plan'); selectWeek(${w.weekNum});">Go to Plan</button>
+        </div>`;
+    });
+
+    custom.forEach(e => {
+        html += `
+        <div class="event-card">
+            <div style="position: absolute; top: 0; right: 0; width: 80px; height: 80px; background: radial-gradient(circle, ${e.color}40 0%, transparent 70%); border-radius: 50%; transform: translate(30%, -30%); pointer-events: none; z-index: 1;"></div>
+            <div class="event-card-header">
+                <span class="cat-badge" style="color: ${e.color}">${e.category}</span>
+                <span>${e.time || ''}</span>
+            </div>
+            <div class="event-card-title">${e.title}</div>
+            <div class="event-card-meta">
+                ${e.location ? '📍 '+e.location+'<br>' : ''}
+                ${e.details ? '<span style="color:var(--text-secondary); margin-top:4px; display:block; white-space:pre-wrap;">' + e.details + '</span>' : ''}
+            </div>
+            <button class="delete-btn" style="align-self:flex-start; margin-top:10px;" onclick="deleteCustomEvent(${e.id})">Remove</button>
+        </div>`;
+    });
+
+    html += `
+        <div style="text-align:center; margin-top:16px;">
+            <button class="btn btn-outline" onclick="startCustomEventWizard('${selectedDateStr}')" style="font-size:12px; padding:8px 16px;">+ Add Event for this Date</button>
+        </div>
+    `;
+
+    list.innerHTML = html;
+}
+
+function getPlanWorkoutsForDate(dateStr) {
+    if(!appData.plan || !appData.plan.weeks || !appData.profile.planStartDate) return [];
+    const startDate = new Date(appData.profile.planStartDate);
+    startDate.setUTCHours(0,0,0,0);
+    
+    const targetDate = new Date(dateStr);
+    targetDate.setUTCHours(0,0,0,0);
+    
+    const diffTime = targetDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if(diffDays < 0) return []; 
+    
+    const weekIdx = Math.floor(diffDays / 7);
+    const weekNum = weekIdx + 1;
+    
+    const daysArr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let dayIdx = (startDate.getDay() + diffDays - 1) % 7;
+    if(dayIdx < 0) dayIdx += 7;
+    const dayName = daysArr[dayIdx];
+
+    const week = appData.plan.weeks.find(w => w.week === weekNum);
+    if(!week) return [];
+    
+    return week.workouts.filter(w => w.day === dayName).map(w => ({...w, weekNum}));
+}
+
+// Collapsible AI Insight Handler
+function toggleAiInsightCard(cardId) {
+    const card = document.getElementById(cardId);
+    if (card) {
+        card.classList.toggle('collapsed');
+        const btn = card.querySelector('.special-info-toggle-btn');
+        if (btn) {
+            btn.textContent = card.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+        }
+    }
+}
+
+// Training Plan
+function renderPlan() {
+    const plan = appData.plan;
+    const currentWeek = appData.profile.currentWeek;
+    document.getElementById('planTargetSub').textContent = `Target: ${appData.profile.event} in ${appData.profile.targetTime}`;
+
+    if (!plan || !plan.weeks || plan.weeks.length === 0) {
+        document.getElementById('aiSpecialInfo').innerHTML = `
+            <div class="special-info-card">
+                <div class="special-info-header">
+                    <div class="special-info-title">AI Insight</div>
+                </div>
+                <div class="special-info-text">No plan available. Go to the AI Coach tab to generate your initial plan.</div>
+            </div>`;
+        document.getElementById('weekSelector').innerHTML = '';
+        document.getElementById('weekPhase').innerHTML = '';
+        document.getElementById('weekWorkouts').innerHTML = '';
+        return;
+    }
+
+    if (plan.specialInformation) {
+        document.getElementById('aiSpecialInfo').innerHTML = `
+            <div class="special-info-card collapsed" id="aiInsightPlanCard">
+                <div class="special-info-header" onclick="toggleAiInsightCard('aiInsightPlanCard')">
+                    <div class="special-info-title">AI Insight</div>
+                    <div class="special-info-toggle-btn">Expand</div>
+                </div>
+                <div class="special-info-text">${plan.specialInformation}</div>
+            </div>
+        `;
+    } else {
+        document.getElementById('aiSpecialInfo').innerHTML = '';
+    }
+
+    document.getElementById('weekSelector').innerHTML = plan.weeks.map(w => `
+        <button class="week-btn ${w.week === currentWeek ? 'active' : ''}" onclick="selectWeek(${w.week})">W${w.week}</button>
+    `).join('');
+    
+    selectWeek(currentWeek);
+}
+
+function selectWeek(weekNum) {
+    if(!appData.plan || !appData.plan.weeks) return;
+    appData.profile.currentWeek = weekNum;
+    saveData();
+
+    document.querySelectorAll('.week-btn').forEach(b => {
+        b.classList.remove('active');
+        if (b.textContent === 'W' + weekNum) b.classList.add('active');
+    });
+    
+    const week = appData.plan.weeks.find(w => w.week === weekNum);
+    if (!week) return;
+    
+    document.getElementById('weekPhase').innerHTML = `
+        <span class="phase-badge">${week.phase}</span>
+        <h2 style="font-size:18px; margin-bottom:4px;">Week ${week.week}</h2>
+        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:20px;">${week.description}</p>
+    `;
+    
+    document.getElementById('weekWorkouts').innerHTML = week.workouts.map((wo, i) => {
+        const key = `w${weekNum}_${i}`;
+        const done = appData.completedWorkouts[key];
+        const descHtml = parseExerciseTerms(wo.desc);
+
+        return `
+        <div class="workout-card ${done ? 'completed' : ''}">
+            <div class="workout-header">
+                <span class="workout-day">${wo.day}</span>
+                <span class="workout-type type-${wo.type.toLowerCase().replace(' ','')}">${wo.type}</span>
+            </div>
+            <div class="workout-title">${wo.title}</div>
+            <div class="workout-desc">${descHtml}</div>
+            <div class="workout-metrics">
+                ${wo.distance ? `<div class="workout-metric">Distance: <span>${wo.distance}</span></div>` : ''}
+                ${wo.pace ? `<div class="workout-metric">Pace: <span>${wo.pace}</span></div>` : ''}
+                ${wo.duration ? `<div class="workout-metric">Duration: <span>${wo.duration}</span></div>` : ''}
+            </div>
+            <div class="workout-actions">
+                <button class="btn ${done ? 'btn-accent' : ''}" style="flex:1; padding:8px; font-size:12px;" onclick="toggleWorkout('${key}')">
+                    ${done ? 'Completed' : 'Mark Complete'}
+                </button>
+                <button class="btn btn-outline" style="flex:1; padding:8px; font-size:12px;" onclick="startLogWizard('${wo.type}')">Log</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// History
+function renderHistory() {
+    const runs = appData.runs;
+    const body = document.getElementById('historyBody');
+    const emptyMsg = document.getElementById('noHistory');
+    if (!body) return;
+
+    if (!runs.length) {
+        body.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+    }
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    body.innerHTML = [...runs].reverse().map(r => `
+        <div class="history-card">
+            <div class="history-main">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="workout-type type-${r.type.toLowerCase()}">${r.type}</span>
+                    <span class="history-date">${r.date}</span>
+                </div>
+                <div class="history-stats">
+                    ${r.distance ? r.distance + ' units <span>|</span>' : ''} 
+                    ${r.duration ? r.duration + ' min' : ''}
+                </div>
+            </div>
+            <button class="delete-btn" onclick="deleteRun(${r.id})">Del</button>
+        </div>`).join('');
+}
+
+function deleteRun(id) {
+    if (!confirm('Delete this activity?')) return;
+    appData.runs = appData.runs.filter(r => r.id !== id);
+    saveData();
+    renderHistory();
+    renderDashboard();
+    showToast("Activity deleted.");
+}
+
+// AI Coach Prompt Generation
+function switchAITab(mode) {
+    currentPromptMode = mode;
+    document.getElementById('tabInitial').classList.toggle('active', mode === 'initial');
+    document.getElementById('tabUpdate').classList.toggle('active', mode === 'update');
+    document.getElementById('promptOutput').textContent = 'Click Generate to begin...';
+}
+
+function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => fallbackClipboardCopy(text));
+    } else {
+        fallbackClipboardCopy(text);
+    }
+}
+
+function fallbackClipboardCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+}
+
+function generatePrompt() {
+    generatePromptForWeeks(null);
+}
+
+function generatePromptForWeeks(targetWeeks = null) {
+    const p = appData.profile;
+    const a = p.availability;
+    const availStr = `Mon: ${a.mon}m, Tue: ${a.tue}m, Wed: ${a.wed}m, Thu: ${a.thu}m, Fri: ${a.fri}m, Sat: ${a.sat}m, Sun: ${a.sun}m. (0 means NO training possible).`;
+    
+    let prompt = "";
+
+    if (currentPromptMode === 'initial') {
+        const weeksText = targetWeeks 
+            ? `Design an exact ${targetWeeks}-week plan leading directly up to race day on ${p.raceDate || 'the final week'}. Include structured Base, Build, Peak, and Taper phases.`
+            : `Create a progressive 5-week block (or tailored to race date).`;
+
+        prompt = `You are an elite endurance and multi-sport coach. Create an Initial Training Plan.
+
+[ATHLETE PROFILE]
+• Age: ${p.age}
+• Target: ${p.event} (Goal Time: ${p.targetTime})
+• Race Date: ${p.raceDate || "Not specified"}
+• Baseline: Swim: ${p.stats.swim} | Bike: ${p.stats.bike} | Run: ${p.stats.run}
+• Gear: Bike: ${p.gear.bike} | Shoes: ${p.gear.shoes} | Watch: ${p.gear.watch}
+• Current Limitations: ${p.limitations || "None"}
+• Availability: ${availStr}
+
+[TASKS]
+1. Assess goal realism and provide direct encouragement or modifications in "specialInformation".
+2. ${weeksText}
+   - Tailor specifically to their discipline goals. Multiple sessions in a single day are allowed.
+3. Provide daily motivational quotes formatted with explicit day dividers using pipes, e.g. "Monday: ... | Tuesday: ... | Wednesday: ..." in "motivationalQuote".
+4. If using specific terminology in descriptions, wrap it in pipes (e.g., |Brick Workout|) and add the definition and 'how to execute' to the "dictionary" array.
+5. Output strict JSON only.
+
+{
+  "motivationalQuote": "Monday: Stay focused. | Tuesday: Small steps matter. | Wednesday: Build endurance.",
+  "specialInformation": "Your feedback...",
+  "dictionary": [
+    {"term": "Brick Workout", "definition": "A workout combining two disciplines consecutively.", "howTo": "Immediately transition from bike to run."}
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "phase": "Base",
+      "description": "...",
+      "workouts": [
+        {
+          "day": "Tuesday",
+          "type": "Swim|Bike|Run|Brick|Rest",
+          "title": "...",
+          "distance": "...",
+          "duration": "...",
+          "pace": "...",
+          "desc": "Description with |terms|..."
+        }
+      ]
+    }
+  ]
+}`;
+    } else {
+        const runs = appData.runs.slice(-10);
+        const runLog = runs.map(r => `${r.date} [${r.type}]: ${r.distance}km, ${r.duration}m. Notes: ${r.notes||'none'}`).join('\n');
+        
+        prompt = `You are an elite coach updating my training plan.
+
+[ATHLETE PROFILE]
+• Target: ${p.event}
+• Current Week: ${p.currentWeek}
+• Limitations: ${p.limitations || "None"}
+• Availability: ${availStr}
+
+[RECENT LOGS]
+${runLog || "No recent logs"}
+
+[TASKS]
+1. Adjust plan for Week ${p.currentWeek} and Week ${p.currentWeek + 1} based on recent logs and current limitations.
+2. Provide daily motivational quotes formatted with pipes: "Monday: ... | Tuesday: ... | Wednesday: ..." in "motivationalQuote".
+3. Update dictionary for any new terms.
+4. Output strict JSON:
+
+{
+  "motivationalQuote": "Monday: Adjust and adapt. | Tuesday: Consistency is key.",
+  "specialInformation": "Feedback on recent logs...",
+  "dictionary": [],
+  "weeks": [ /* Array of updated weeks */ ]
+}`;
+    }
+
+    document.getElementById('promptOutput').textContent = prompt;
+    copyTextToClipboard(prompt);
+    showToast('Prompt generated & copied to clipboard!');
+}
+
+function copyPrompt() {
+    const text = document.getElementById('promptOutput').textContent;
+    copyTextToClipboard(text);
+    showToast('Copied to clipboard!');
+}
+
+function applyAIPlan() {
+    const input = document.getElementById('aiPlanInput').value.trim();
+    if (!input) { showToast('Paste JSON first'); return; }
+
+    try {
+        let jsonStr = input;
+        const match = input.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match) jsonStr = match[1];
+        else { const match2 = input.match(/\{[\s\S]*\}/); if (match2) jsonStr = match2[0]; }
+        
+        const newPlan = JSON.parse(jsonStr);
+        if (!newPlan.weeks) throw new Error('Invalid structure: missing weeks array');
+
+        if (newPlan.dictionary) {
+            newPlan.dictionary.forEach(d => {
+                appData.exerciseDB[d.term.toLowerCase()] = { definition: d.definition, howTo: d.howTo };
+            });
+        }
+
+        const overwriteEl = document.getElementById('overwritePlanCheck');
+        const overwrite = overwriteEl ? overwriteEl.checked : true;
+
+        if (overwrite || !appData.plan) {
+            appData.plan = newPlan;
+            appData.completedWorkouts = {}; 
+            appData.profile.currentWeek = newPlan.weeks[0]?.week || 1;
+        } else {
+            const existingWeeks = appData.plan.weeks.filter(w => !newPlan.weeks.find(nw => nw.week === w.week));
+            appData.plan = {
+                motivationalQuote: newPlan.motivationalQuote || appData.plan.motivationalQuote,
+                specialInformation: newPlan.specialInformation || appData.plan.specialInformation,
+                weeks: [...existingWeeks, ...newPlan.weeks].sort((a,b) => a.week - b.week)
+            };
+        }
+        
+        saveData();
+        showToast('Plan applied!');
+        document.getElementById('aiPlanInput').value = '';
+        showPage('plan');
+    } catch (e) { showToast('Error: ' + e.message); }
+}
+
+// Utils & Wizards
+function parseExerciseTerms(text) {
+    if (!text) return '';
+    return text.replace(/\|([^|]+)\|/g, (match, term) => `<span class="exercise-term" onclick="showDictEntry('${term}')">${term}</span>`);
+}
+
+function showDictEntry(term) {
+    const entry = appData.exerciseDB[term.toLowerCase()];
+    document.getElementById('dictTitle').textContent = term;
+    if(entry) {
+        document.getElementById('dictDefinition').textContent = entry.definition;
+        document.getElementById('dictHowTo').textContent = entry.howTo;
+    } else {
+        document.getElementById('dictDefinition').textContent = "Term definition pending AI update.";
+        document.getElementById('dictHowTo').textContent = "No execution instructions found.";
+    }
+    document.getElementById('dictModal').classList.add('active');
+}
+
+function toggleWorkout(key) {
+    if (appData.completedWorkouts[key]) delete appData.completedWorkouts[key];
+    else appData.completedWorkouts[key] = new Date().toISOString();
+    saveData();
+    renderPlan();
+    renderDashboard();
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+function openGuide() { document.getElementById('guideModal').classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+// Wizard System for Activity Logging & Custom Events
+let wizardSteps = [];
+let currentWizardStep = 0;
+let wizardOnComplete = null;
+
+function openWizard(title, steps, onComplete) {
+    document.getElementById('wizardTitle').textContent = title;
+    wizardSteps = steps;
+    currentWizardStep = 0;
+    wizardOnComplete = onComplete;
+    document.getElementById('wizardModal').classList.add('active');
+    renderWizardStep();
+}
+
+function closeWizard() { document.getElementById('wizardModal').classList.remove('active'); }
+
+function renderWizardStep() {
+    const step = wizardSteps[currentWizardStep];
+    document.getElementById('wizardProgress').innerHTML = wizardSteps.map((_, i) => `<div class="wizard-dot ${i <= currentWizardStep ? 'active' : ''}"></div>`).join('');
+    document.getElementById('wizardBody').innerHTML = `
+        <div class="wizard-step active">
+            <h3 style="margin-bottom:16px; font-size:16px;">${step.title}</h3>
+            ${step.html}
+        </div>
+    `;
+    
+    document.getElementById('wizardBtnPrev').style.display = currentWizardStep > 0 ? 'block' : 'none';
+    document.getElementById('wizardBtnSkip').style.display = step.canSkip ? 'block' : 'none';
+    document.getElementById('wizardBtnNext').textContent = currentWizardStep === wizardSteps.length - 1 ? 'Finish' : 'Next';
+
+    if(step.onRender) step.onRender();
+}
+
+function wizardNext() {
+    const step = wizardSteps[currentWizardStep];
+    if(step.onSave) {
+        const valid = step.onSave();
+        if(valid === false) return; 
+    }
+    
+    if (currentWizardStep < wizardSteps.length - 1) {
+        currentWizardStep++;
+        renderWizardStep();
+    } else {
+        if(wizardOnComplete) wizardOnComplete();
+        closeWizard();
+    }
+}
+
+function wizardPrev() {
+    if (currentWizardStep > 0) {
+        currentWizardStep--;
+        renderWizardStep();
+    }
+}
+
+function wizardSkip() {
+    const step = wizardSteps[currentWizardStep];
+    if (step && step.onSkip) step.onSkip();
+    if (currentWizardStep < wizardSteps.length - 1) {
+        currentWizardStep++;
+        renderWizardStep();
+    } else {
+        if(wizardOnComplete) wizardOnComplete();
+        closeWizard();
+    }
+}
+
+function startLogWizard(prefillType = '', prefillDate = '') {
+    let logData = { date: prefillDate || new Date().toISOString().slice(0, 10), type: prefillType || 'Run' };
+    openWizard('Log Activity', [
+        {
+            title: 'Basics', canSkip: false,
+            html: `
+                <div class="form-group"><label>Date</label><input type="date" id="lDate" value="${logData.date}"></div>
+                <div class="form-group"><label>Type</label>
+                    <select id="lType">
+                        <option value="Run" ${logData.type.toLowerCase().includes('run')?'selected':''}>Run</option>
+                        <option value="Bike" ${logData.type.toLowerCase().includes('bike')?'selected':''}>Bike</option>
+                        <option value="Swim" ${logData.type.toLowerCase().includes('swim')?'selected':''}>Swim</option>
+                        <option value="Brick" ${logData.type.toLowerCase().includes('brick')?'selected':''}>Brick</option>
+                        <option value="Strength">Strength / Other</option>
+                    </select>
+                </div>
+            `,
+            onSave: () => {
+                logData.date = document.getElementById('lDate').value;
+                logData.type = document.getElementById('lType').value;
+                if(!logData.date) { showToast('Date required'); return false; }
+            }
+        },
+        {
+            title: 'Metrics & Feel', canSkip: true,
+            html: `
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;"><label>Dist (km)</label><input type="number" step="0.01" id="lDist"></div>
+                    <div class="form-group" style="flex:1;"><label>Dur (min)</label><input type="number" id="lDur"></div>
+                </div>
+                <div class="form-group" style="margin-top:12px;"><label>Perceived Effort (1-10)</label><input type="number" min="1" max="10" id="lRpe"></div>
+                <div class="form-group"><label>Notes (Fatigue, Adjustments)</label><textarea id="lNotes"></textarea></div>
+            `,
+            onSave: () => {
+                logData.distance = parseFloat(document.getElementById('lDist').value) || 0;
+                logData.duration = parseFloat(document.getElementById('lDur').value) || 0;
+                logData.rpe = parseInt(document.getElementById('lRpe').value) || 0;
+                logData.notes = document.getElementById('lNotes').value;
+            }
+        }
+    ], () => {
+        logData.id = Date.now();
+        appData.runs.push(logData);
+        appData.runs.sort((a, b) => new Date(a.date) - new Date(b.date));
+        saveData();
+        showToast('Activity Logged!');
+        renderDashboard();
+        if(document.getElementById('page-history').classList.contains('active')) renderHistory();
+    });
+}
+
+// Modal overlay close clicks
+document.querySelectorAll('.modal-overlay').forEach(el => { el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('active'); }); });
+document.querySelectorAll('.wizard-overlay').forEach(el => { el.addEventListener('click', (e) => { if (e.target === el) closeWizard(); }); });
+
+// Export functions to window for inline onclick handlers
+window.showPage = showPage;
+window.openProfileModal = openProfileModal;
+window.closeProfileModal = closeProfileModal;
+window.switchProfileSubtab = switchProfileSubtab;
+window.setAthleteStep = setAthleteStep;
+window.athleteWizardNext = athleteWizardNext;
+window.athleteWizardPrev = athleteWizardPrev;
+window.athleteWizardSkip = athleteWizardSkip;
+window.saveProfileForm = saveProfileForm;
+window.calculateWeeksTillRaceUI = calculateWeeksTillRaceUI;
+window.generatePlanTillRace = generatePlanTillRace;
+window.authSignUp = authSignUp;
+window.authSignIn = authSignIn;
+window.authSignOut = authSignOut;
+window.deleteCloudAccountData = deleteCloudAccountData;
+window.promptDeveloperAccess = promptDeveloperAccess;
+window.submitDeveloperPassword = submitDeveloperPassword;
+window.openLegalModal = openLegalModal;
+window.startLogWizard = startLogWizard;
+window.startCustomEventWizard = startCustomEventWizard;
+window.selectWizardColor = selectWizardColor;
+window.toggleAiInsightCard = toggleAiInsightCard;
+window.selectWeek = selectWeek;
+window.toggleWorkout = toggleWorkout;
+window.showDictEntry = showDictEntry;
+window.deleteRun = deleteRun;
+window.changeMonth = changeMonth;
+window.selectCalendarDate = selectCalendarDate;
+window.applyCategory = applyCategory;
+window.saveCustomEvent = saveCustomEvent;
+window.deleteCustomEvent = deleteCustomEvent;
+window.switchAITab = switchAITab;
+window.generatePrompt = generatePrompt;
+window.copyPrompt = copyPrompt;
+window.applyAIPlan = applyAIPlan;
+window.openGuide = openGuide;
+window.closeModal = closeModal;
+window.openWizard = openWizard;
+window.closeWizard = closeWizard;
+window.wizardNext = wizardNext;
+window.wizardPrev = wizardPrev;
+window.wizardSkip = wizardSkip;
+window.openDataModal = openDataModal;
+window.exportDataJSON = exportDataJSON;
+window.copyDataJSON = copyDataJSON;
+window.importDataJSON = importDataJSON;
+window.resetLocalStorage = resetLocalStorage;
+window.syncToSupabase = syncToSupabase;
+
+</script>
 </body>
 </html>
