@@ -1,0 +1,21 @@
+{
+  "name": "trit Dashboard",
+  "short_name": "trit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "trit - Multi-Sport AI Coach & Training Dashboard",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/GffsSBZz/IMG-4427.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://i.ibb.co/GffsSBZz/IMG-4427.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

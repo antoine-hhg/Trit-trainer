@@ -1,0 +1,6 @@
+{
+  "name": "trit - Multi-Sport AI Coach",
+  "description": "Multi-sport endurance training dashboard with Supabase cloud sync, adaptive training plans, interactive calendar, and progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

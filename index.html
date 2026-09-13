@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>trit - Multi-Sport AI Coach</title>
+    <meta name="description" content="Multi-sport endurance training dashboard with Supabase cloud sync, adaptive training plans, interactive calendar, and progress tracking.">
+    <meta property="og:title" content="trit - Multi-Sport AI Coach">
+    <meta property="og:description" content="Multi-sport endurance training dashboard with Supabase cloud sync, adaptive training plans, interactive calendar, and progress tracking.">
+    
+    <!-- Favicon & PWA Home Screen Shortcuts -->
+    <link rel="icon" type="image/png" href="https://i.ibb.co/GffsSBZz/IMG-4427.png">
+    <link rel="apple-touch-icon" href="https://i.ibb.co/GffsSBZz/IMG-4427.png">
+    <link rel="shortcut icon" href="https://i.ibb.co/GffsSBZz/IMG-4427.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="trit">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <img src="https://i.ibb.co/GffsSBZz/IMG-4427.png" alt="trit logo" class="logo-icon">
+            trit
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" onclick="openGuide()">Guide</button>
+            <button class="btn btn-accent" onclick="openProfileModal('you')">Profile</button>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <button class="nav-btn active" onclick="showPage('dashboard')">
+            <span>Dash</span>
+            <div class="nav-indicator"></div>
+        </button>
+        <button class="nav-btn" onclick="showPage('plan')">
+            <span>Plan</span>
+            <div class="nav-indicator"></div>
+        </button>
+        <button class="nav-btn" onclick="showPage('calendar')">
+            <span>Calendar</span>
+            <div class="nav-indicator"></div>
+        </button>
+        <button class="nav-btn" onclick="showPage('history')">
+            <span>History</span>
+            <div class="nav-indicator"></div>
+        </button>
+        <button class="nav-btn" onclick="showPage('prompt')">
+            <span>AI</span>
+            <div class="nav-indicator"></div>
+        </button>
+    </nav>
+
+    <main class="main">
+        <!-- Dashboard Page -->
+        <div id="page-dashboard" class="page active">
+            <h1 class="section-title">Dashboard</h1>
+            <p class="section-subtitle" id="dashTargetSub">Target: —</p>
+            
+            <!-- Daily Motivational Quote -->
+            <div class="stat-card" style="margin-bottom: 24px; padding: 16px;">
+                <div class="stat-label">Daily Motivation</div>
+                <div style="font-style: italic; color: var(--accent-bright); text-align: center; font-size: 14px; line-height: 1.5;" id="dashQuote">
+                    "Consistency beats intensity. Keep pushing forward!"
+                </div>
+            </div>
+
+            <div class="progress-section">
+                <div class="progress-header">
+                    <span class="progress-title">Plan Progress</span>
+                    <span class="progress-pct" id="progressPct">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progressBar" style="width: 0%"></div>
+                </div>
+                <div class="progress-details">
+                    <span id="progressWeek">Week 0</span>
+                    <span id="progressWorkouts">0 workouts</span>
+                </div>
+            </div>
+
+            <div class="stats-grid" id="dashboardStats"></div>
+            
+            <button class="btn btn-accent" style="width: 100%; padding: 16px; margin-bottom: 24px; font-size: 15px;" onclick="startLogWizard()">Log New Activity</button>
+
+            <div id="aiSpecialInfoDashboard"></div>
+        </div>
+
+        <!-- Training Plan Page -->
+        <div id="page-plan" class="page">
+            <h1 class="section-title">Training Plan</h1>
+            <p class="section-subtitle" id="planTargetSub">Target: —</p>
+
+            <div id="aiSpecialInfo"></div>
+            <div class="week-selector" id="weekSelector"></div>
+            <div id="weekPhase"></div>
+            <div id="weekWorkouts"></div>
+        </div>
+
+        <!-- Calendar Page -->
+        <div id="page-calendar" class="page">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div>
+                    <h1 class="section-title" style="margin-bottom:2px;">Calendar</h1>
+                    <p class="section-subtitle" style="margin-bottom:0;">Manage your schedule & workouts</p>
+                </div>
+                <button class="btn btn-accent" onclick="startCustomEventWizard()" style="padding:10px 18px; font-weight:700;">+ Add Event</button>
+            </div>
+
+            <div class="form-section">
+                <div class="calendar-header">
+                    <button class="btn" onclick="changeMonth(-1)">&lt;</button>
+                    <div class="calendar-title" id="calendarMonthYear">Month Year</div>
+                    <button class="btn" onclick="changeMonth(1)">&gt;</button>
+                </div>
+                
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Days generated dynamically -->
+                </div>
+            </div>
+
+            <div style="margin-top:16px; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Saved Categories</div>
+                <div class="cat-list-display" id="savedCategoriesList"></div>
+            </div>
+            
+            <div class="event-list" id="calendarSelectedEvents">
+                <p style="color:var(--text-dim); text-align:center;">Select a day to view activities.</p>
+            </div>
+        </div>
+
+        <!-- History Page -->
+        <div id="page-history" class="page">
+            <h1 class="section-title">History</h1>
+            <p class="section-subtitle">All logged activities</p>
+
+            <div id="historyBody"></div>
+            <p id="noHistory" style="text-align:center; color:var(--text-dim); padding:40px; display:none;">No activities logged yet.</p>
+        </div>
+
+        <!-- AI Coach Page -->
+        <div id="page-prompt" class="page">
+            <h1 class="section-title">AI Coach</h1>
+            <p class="section-subtitle">Generate & update your personalized plan</p>
+
+            <div class="ai-tab-container">
+                <div class="ai-tab active" id="tabInitial" onclick="switchAITab('initial')">Initial Plan</div>
+                <div class="ai-tab" id="tabUpdate" onclick="switchAITab('update')">Weekly Update</div>
+            </div>
+
+            <div class="form-section" style="border-color: var(--accent);">
+                <div class="form-title" id="aiPromptTitle">Generate Initial Prompt</div>
+                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;" id="aiPromptDesc">
+                    Use your Profile baseline to generate a multi-week plan targeting your goals while avoiding injuries.
+                </p>
+                <div style="display:flex; gap:12px;">
+                    <button class="btn btn-accent" style="flex:2;" onclick="generatePrompt()">Generate</button>
+                    <button class="btn" style="flex:1;" onclick="copyPrompt()">Copy</button>
+                </div>
+                <div class="prompt-box" id="promptOutput">Click Generate to begin...</div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-title">Apply AI Response</div>
+                <div class="form-group">
+                    <label>Paste the JSON plan returned by the AI here</label>
+                    <textarea id="aiPlanInput" placeholder='{"motivationalQuote": "...", "specialInformation": "...", "dictionary": [...], "weeks": [...]}' style="min-height:140px; font-family: monospace; font-size:11px;"></textarea>
+                </div>
+
+                <button class="btn btn-accent" style="width:100%; margin-top:20px; padding:16px;" onclick="applyAIPlan()">Apply Plan</button>
+            </div>
+        </div>
+
+        <!-- Subtle Legal Footer with Small Button on Bottom Right -->
+        <footer class="app-footer">
+            <button class="btn btn-outline" style="font-size:11px; padding:5px 12px; border-radius:14px; color:var(--text-dim); border-color:var(--border);" onclick="openLegalModal()">
+                Privacy & Disclaimers
+            </button>
+        </footer>
+    </main>
+
+    <!-- Unified Profile Modal with "You" & "Settings" Subsections -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal" style="max-width: 580px;">
+            <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+            <h2>Profile & Settings</h2>
+            <div class="subtabs-container">
+                <button class="subtab-btn active" id="subtabYou" onclick="switchProfileSubtab('you')">You (Athlete)</button>
+                <button class="subtab-btn" id="subtabSettings" onclick="switchProfileSubtab('settings')">Settings & Cloud</button>
+            </div>
+
+            <!-- Subsection: You (Athlete Guided Process) -->
+            <div id="profileSectionYou">
+                <!-- Step Navigation Pills -->
+                <div class="athlete-step-nav">
+                    <button class="athlete-step-pill active" id="athStepPill1" onclick="setAthleteStep(1)">1. Targets</button>
+                    <button class="athlete-step-pill" id="athStepPill2" onclick="setAthleteStep(2)">2. Baseline</button>
+                    <button class="athlete-step-pill" id="athStepPill3" onclick="setAthleteStep(3)">3. Gear</button>
+                    <button class="athlete-step-pill" id="athStepPill4" onclick="setAthleteStep(4)">4. Schedule</button>
+                </div>
+
+                <!-- Step 1: Core Targets & Race Countdown -->
+                <div id="athStepContent1" class="athlete-step-content">
+                    <h3 style="margin-bottom:12px;">Step 1: Core Targets & Event</h3>
+                    <div class="form-grid" style="margin-bottom: 20px;">
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;"><label>Age</label><input type="number" id="pAge" value="28"></div>
+                            <div class="form-group" style="flex:2;"><label>Target Event / Goal</label><input type="text" id="pEvent" placeholder="Olympic Triathlon, Half Ironman..."></div>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;"><label>Target Time</label><input type="text" id="pTargetTime" placeholder="5:30:00"></div>
+                            <div class="form-group" style="flex:1;"><label>Plan Start Date</label><input type="date" id="pPlanStartDate"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Upcoming Race Date</label>
+                            <input type="date" id="pRaceDate" onchange="calculateWeeksTillRaceUI()">
+                        </div>
+                        <!-- Race Countdown & Plan till Next Race -->
+                        <div id="raceCalculationBox"></div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Baseline Fitness -->
+                <div id="athStepContent2" class="athlete-step-content" style="display:none;">
+                    <h3 style="margin-bottom:12px;">Step 2: Current Baseline</h3>
+                    <div class="form-grid" style="margin-bottom: 20px;">
+                        <div class="form-group"><label>Swim (e.g. 2km in 42min)</label><input type="text" id="pSwim" placeholder="e.g. 2km in 42min"></div>
+                        <div class="form-group"><label>Bike (e.g. 32kph flat)</label><input type="text" id="pBike" placeholder="e.g. 32kph flat"></div>
+                        <div class="form-group"><label>Run (e.g. 5K in 21:00)</label><input type="text" id="pRun" placeholder="e.g. 5K in 21:00"></div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Equipment & Health -->
+                <div id="athStepContent3" class="athlete-step-content" style="display:none;">
+                    <h3 style="margin-bottom:12px;">Step 3: Equipment & Limitations</h3>
+                    <div class="form-grid" style="margin-bottom: 20px;">
+                        <div class="form-group"><label>Bike Setup</label><input type="text" id="pGearBike" value="Canyon Aeroad CF SLX"></div>
+                        <div class="form-group"><label>Running Shoes</label><input type="text" id="pGearShoes" value="Adidas Adizero Evo SL"></div>
+                        <div class="form-group"><label>GPS / Watch</label><input type="text" id="pGearWatch" value="Garmin Forerunner 965"></div>
+                        <div class="form-group"><label>Current Limitations / Injuries</label><textarea id="pLimitations" placeholder="e.g. Achilles tightness, avoiding high-impact runs..."></textarea></div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Daily Availability -->
+                <div id="athStepContent4" class="athlete-step-content" style="display:none;">
+                    <h3 style="margin-bottom:12px;">Step 4: Daily Availability (Minutes)</h3>
+                    <div class="availability-grid" style="margin-bottom: 20px;">
+                        <div class="form-group"><label class="zone-label">Mon</label><input type="number" id="pMon" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Tue</label><input type="number" id="pTue" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Wed</label><input type="number" id="pWed" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Thu</label><input type="number" id="pThu" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Fri</label><input type="number" id="pFri" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Sat</label><input type="number" id="pSat" class="zone-input"></div>
+                        <div class="form-group"><label class="zone-label">Sun</label><input type="number" id="pSun" class="zone-input"></div>
+                    </div>
+                </div>
+
+                <!-- Guided 3-Button Navigation -->
+                <div style="display:flex; gap:10px; margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+                    <button class="btn" id="athBtnPrev" style="flex:1; display:none;" onclick="athleteWizardPrev()">Back</button>
+                    <button class="btn btn-outline" id="athBtnSkip" style="flex:1;" onclick="athleteWizardSkip()">Skip</button>
+                    <button class="btn btn-accent" id="athBtnNext" style="flex:2;" onclick="athleteWizardNext()">Next</button>
+                </div>
+            </div>
+
+            <!-- Subsection: Settings & Supabase Cloud Sync -->
+            <div id="profileSectionSettings" style="display:none;">
+                <h3 style="margin-bottom:8px;">Cloud Synchronization (Supabase)</h3>
+                
+                <!-- Notice when in local storage mode -->
+                <div class="notice-box info" id="settingsLocalNotice">
+                    <div>
+                        <strong>Local Storage Mode:</strong> Your training data is currently saved only in your local browser storage. Register or log in to sync your profile across devices and back up to the cloud.
+                    </div>
+                </div>
+
+                <!-- Logged Out Auth UI -->
+                <div id="settingsLoggedOutView">
+                    <div id="authNoticeBox" class="notice-box" style="display:none;"></div>
+                    
+                    <div class="form-grid" style="margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" id="authEmailInput" placeholder="athlete@example.com" autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-bottom:14px;">
+                        <button class="btn btn-accent" style="flex:1;" onclick="authSignIn(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value)">
+                            Log In
+                        </button>
+                        <button class="btn btn-outline" style="flex:1;" onclick="authSignUp(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value)">
+                            Create Account
+                        </button>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-dim); text-align:center; margin-bottom: 20px;">
+                        When creating an account, an email verification link will be sent. Upon login, your account data will synchronize automatically.
+                    </p>
+                </div>
+
+                <!-- Logged In View -->
+                <div id="settingsLoggedInView" style="display:none;">
+                    <div class="notice-box success" style="margin-bottom:16px;">
+                        <div>
+                            Logged in as: <strong id="settingsUserEmail">—</strong><br>
+                            <span style="font-size:11px; opacity:0.9;">All plans, calendar events, and logged workouts sync automatically to Supabase.</span>
+                        </div>
+                    </div>
+                    
+                    <div style="display:flex; gap:10px; margin-bottom:16px;">
+                        <button class="btn btn-outline" style="flex:1;" onclick="syncToSupabase(); showToast('Synchronizing with Supabase...');">
+                            Sync Now
+                        </button>
+                        <button class="btn" style="flex:1;" onclick="authSignOut()">
+                            Logout
+                        </button>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
+                        <button class="btn btn-danger" style="width:100%; font-size:12px;" onclick="deleteCloudAccountData()">
+                            Delete Cloud Account Data
+                        </button>
+                        <p style="font-size:11px; color:var(--text-dim); margin-top:6px; text-align:center;">
+                            Permanently wipes your user state from the Supabase database and resets session.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Legal Disclaimers & Dev Access Trigger -->
+                <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline" style="font-size:11px; padding:6px 12px; border-radius:14px;" onclick="openLegalModal()">
+                        Privacy & Disclaimers
+                    </button>
+                    <button type="button" class="btn btn-outline" style="font-size:11px; padding:6px 12px; border-radius:14px;" onclick="promptDeveloperAccess()" title="Protected with developer password (Hello123)">
+                        Developer Tools & Backups
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guide Modal (with developer trigger) -->
+    <div class="modal-overlay" id="guideModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('guideModal')">&times;</button>
+            <h2>Welcome to trit</h2>
+            <h3>Your Multi-Sport AI Coach</h3>
+            <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.6;">
+                <p><strong>Step 1: Complete your Profile</strong><br>Open Profile to set baseline fitness, race date, gear, and availability. Use the countdown tool to generate plans up to race day!</p>
+                <p><strong>Step 2: Get your Plan</strong><br>Go to the AI tab. Generate a prompt, paste it into your AI model, and paste the JSON back.</p>
+                <p><strong>Step 3: Calendar & Tracking</strong><br>Add events with categories and colors. Click any date to view planned workouts and events.</p>
+                <p><strong>Step 4: Update & Adapt</strong><br>Log activities with the wizard. Cloud sync automatically keeps your progress backed up across devices.</p>
+            </div>
+            
+            <button class="btn btn-accent" style="width:100%; margin-top:20px; padding:14px;" onclick="closeModal('guideModal')">Got it, let's go!</button>
+
+            <!-- Developer button in guide page -->
+            <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--text-dim);">
+                <span>trit Multi-Sport AI Coach</span>
+                <span style="cursor:pointer; text-decoration:underline dotted; padding:4px;" onclick="promptDeveloperAccess()" title="Developer Console (Password: Hello123)">Dev Tools (v2.4)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Dictionary Modal -->
+    <div class="modal-overlay" id="dictModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('dictModal')">&times;</button>
+            <h2 id="dictTitle">Term</h2>
+            <h3 id="dictCategory">Definition</h3>
+            <p id="dictDefinition" style="font-size: 15px;"></p>
+            <h3 style="margin-top: 20px;">How to execute</h3>
+            <p id="dictHowTo"></p>
+        </div>
+    </div>
+
+    <!-- Data & Storage Management Modal (Developer Protected) -->
+    <div class="modal-overlay" id="dataModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('dataModal')">&times;</button>
+            <h2>Data & Storage Management</h2>
+            <h3>Developer & Local Storage Console</h3>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Storage Status</label>
+                <div id="storageStatus" style="font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    Checking storage...
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+                <button class="btn btn-accent" onclick="exportDataJSON()">Export Data (Download JSON)</button>
+                <button class="btn btn-outline" onclick="copyDataJSON()">Copy Data to Clipboard</button>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Import Data (JSON Backup)</label>
+                <textarea id="importJsonInput" placeholder="Paste your saved JSON here to restore data..." style="min-height:80px; font-family: monospace; font-size:11px;"></textarea>
+                <button class="btn" style="margin-top:8px; width:100%;" onclick="importDataJSON()">Import & Restore</button>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Inspect Local Storage JSON</label>
+                <div class="prompt-box" id="storageInspectBox" style="max-height:140px; font-size:11px;"></div>
+            </div>
+
+            <button class="btn btn-danger" style="width:100%; font-weight:700;" onclick="resetLocalStorage()">Reset All Local Storage Data</button>
+        </div>
+    </div>
+
+    <!-- Legal Terms & Disclaimers Modal (looks similar to guide popup) -->
+    <div class="modal-overlay" id="legalModal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('legalModal')">&times;</button>
+            <h2>Legal Policies & Disclaimers</h2>
+            <h3>Privacy & Data Ownership</h3>
+            <div style="font-size: 14px; color: var(--text-secondary); line-height: 1.6;">
+                <p><strong>Privacy Disclaimer</strong><br>This application stores user account data and application state in a cloud database powered by Supabase. Access is strictly limited to authenticated accounts.</p>
+                <p><strong>Data Ownership & Exports</strong><br>All application data remains fully exportable as a local JSON file at any time. The owner/developer takes no liability for data loss.</p>
+                <p><strong>Device Security</strong><br>When using local mode without signing in, all training logs, baseline metrics, and customized events remain sandboxed entirely within your private browser storage.</p>
+            </div>
+            <button class="btn btn-accent" style="width:100%; margin-top:20px; padding:14px;" onclick="closeModal('legalModal')">I Understand</button>
+        </div>
+    </div>
+
+    <!-- Developer Access Password Modal -->
+    <div class="modal-overlay" id="devPasswordModal">
+        <div class="modal" style="max-width: 420px; text-align: center;">
+            <button class="modal-close" onclick="closeModal('devPasswordModal')">&times;</button>
+            <h2>Developer Authentication</h2>
+            <h3>Console Access</h3>
+            <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
+                Enter the developer password to access internal diagnostics, JSON data exports, and backups.
+            </p>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <input type="password" id="devPasswordInput" placeholder="Password" style="text-align:center; font-size:16px; letter-spacing:2px;" onkeydown="if(event.key==='Enter') submitDeveloperPassword()">
+                <div id="devPasswordError" style="color:var(--warning); font-size:12px; margin-top:8px; display:none;">Incorrect password. Please try again.</div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:16px;">
+                <button class="btn" style="flex:1;" onclick="closeModal('devPasswordModal')">Cancel</button>
+                <button class="btn btn-accent" style="flex:1;" onclick="submitDeveloperPassword()">Unlock</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Wizard Modal -->
+    <div class="wizard-overlay" id="wizardModal">
+        <div class="wizard-container">
+            <div class="wizard-header">
+                <div class="wizard-title" id="wizardTitle">Wizard Setup</div>
+                <button class="modal-close" onclick="closeWizard()">&times;</button>
+            </div>
+            <div class="wizard-progress" id="wizardProgress"></div>
+            <div class="wizard-body" id="wizardBody"></div>
+            <div class="wizard-footer">
+                <button class="btn" id="wizardBtnPrev" style="flex:1; display:none;" onclick="wizardPrev()">Back</button>
+                <button class="btn btn-outline" id="wizardBtnSkip" style="flex:1; display:none;" onclick="wizardSkip()">Skip</button>
+                <button class="btn btn-accent" id="wizardBtnNext" style="flex:2;" onclick="wizardNext()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script type="module" src="/src/app.js"></script>
+</body>
+</html>
