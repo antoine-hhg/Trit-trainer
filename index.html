@@ -18,8 +18,19 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
 
-    <!-- Supabase CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase CDN with onload and secondary CDN fallback for iOS Safari/PWAs -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onload="if(typeof initSupabase==='function') initSupabase();"></script>
+    <script>
+        // Secondary fallback in case jsdelivr is delayed or blocked by iOS content filters
+        window.addEventListener('load', function() {
+            if (!window.supabase) {
+                const s = document.createElement('script');
+                s.src = 'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';
+                s.onload = function() { if (typeof initSupabase === 'function') initSupabase(); };
+                document.head.appendChild(s);
+            }
+        });
+    </script>
 
     <!-- Stylesheet -->
     <style>
@@ -648,6 +659,19 @@ body {
             <h1 class="section-title">Training Plan</h1>
             <p class="section-subtitle" id="planTargetSub">Target: —</p>
 
+            <!-- Plan Schedule & Date Alignment Control Bar -->
+            <div class="plan-schedule-bar" id="planScheduleBar" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="display:flex; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">Week 1 Starts:</span>
+                    <input type="date" id="planQuickStartDate" class="zone-input" style="width:auto; padding:6px 10px; font-size:13px;" onchange="updatePlanStartDate(this.value)">
+                    <span id="planStartDateLabel" style="font-size:12px; color:var(--accent-bright); font-weight:600;"></span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-outline" style="font-size:12px; padding:6px 12px;" onclick="setPlanStartToYesterday()" title="Set Week 1 to start yesterday Monday 14th">Started Yesterday (Sep 14)</button>
+                    <button class="btn btn-outline" style="font-size:12px; padding:6px 12px;" onclick="setPlanStartToThisMonday()" title="Set Week 1 to start Monday of this week">This Week (Sep 14)</button>
+                </div>
+            </div>
+
             <div id="aiSpecialInfo"></div>
             <div class="week-selector" id="weekSelector"></div>
             <div id="weekPhase"></div>
@@ -656,12 +680,20 @@ body {
 
         <!-- Calendar Page -->
         <div id="page-calendar" class="page">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div>
                     <h1 class="section-title" style="margin-bottom:2px;">Calendar</h1>
                     <p class="section-subtitle" style="margin-bottom:0;">Manage your schedule & workouts</p>
                 </div>
                 <button class="btn btn-accent" onclick="startCustomEventWizard()" style="padding:10px 18px; font-weight:700;">+ Add Event</button>
+            </div>
+
+            <!-- Calendar Plan Info Banner -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:12px; color:var(--text-secondary); background:var(--surface); padding:8px 14px; border-radius:8px; border:1px solid var(--border);">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>Training Plan Week 1: <strong id="calPlanStartDisplay" style="color:var(--accent-bright);">—</strong></span>
+                </div>
+                <button class="btn btn-outline" style="font-size:11px; padding:4px 10px;" onclick="showPage('plan')">Adjust Dates in Plan</button>
             </div>
 
             <div class="form-section">
@@ -846,26 +878,28 @@ body {
                 <!-- Logged Out Auth UI -->
                 <div id="settingsLoggedOutView">
                     <div id="authNoticeBox" class="notice-box" style="display:none;"></div>
-                    
-                    <div class="form-grid" style="margin-bottom: 16px;">
-                        <div class="form-group">
-                            <label>Email Address</label>
-                            <input type="email" id="authEmailInput" placeholder="athlete@example.com" autocomplete="email">
-                        </div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password">
-                        </div>
-                    </div>
 
-                    <div style="display:flex; gap:10px; margin-bottom:16px;">
-                        <button class="btn btn-accent" style="flex:1;" onclick="authSignIn(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value)">
-                            Log In
-                        </button>
-                        <button class="btn btn-outline" style="flex:1;" onclick="authSignUp(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value)">
-                            Create Account
-                        </button>
-                    </div>
+                    <form id="authForm" onsubmit="event.preventDefault(); authSignIn(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value);">
+                        <div class="form-grid" style="margin-bottom: 16px;">
+                            <div class="form-group">
+                                <label>Email Address</label>
+                                <input type="email" id="authEmailInput" placeholder="athlete@example.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password" required>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:10px; margin-bottom:16px;">
+                            <button type="submit" class="btn btn-accent" style="flex:1;">
+                                Log In
+                            </button>
+                            <button type="button" class="btn btn-outline" style="flex:1;" onclick="authSignUp(document.getElementById('authEmailInput').value, document.getElementById('authPasswordInput').value)">
+                                Create Account
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
                 <!-- Logged In View -->
@@ -879,8 +913,8 @@ body {
                     </div>
                     
                     <div style="display:flex; gap:10px; margin-bottom:16px;">
-                        <button class="btn btn-outline" style="flex:1;" onclick="manualCloudSync()">
-                            Sync Now
+                        <button class="btn btn-accent" style="flex:1;" onclick="manualCloudSync()">
+                            ⟳ Sync Now
                         </button>
                         <button class="btn" style="flex:1;" onclick="authSignOut()">
                             Logout
@@ -960,8 +994,8 @@ body {
             </div>
 
             <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
-                <button class="btn btn-accent" onclick="exportDataJSON()">Export Data (Download JSON)</button>
-                <button class="btn btn-outline" onclick="copyDataJSON()">Copy Data to Clipboard</button>
+                <button class="btn btn-accent" onclick="exportDataJSON()">Export Data (Save File / Share)</button>
+                <button class="btn btn-outline" onclick="copyDataJSON()">Copy Full Data to Clipboard</button>
             </div>
 
             <div class="form-group" style="margin-bottom: 16px;">
@@ -971,8 +1005,11 @@ body {
             </div>
 
             <div class="form-group" style="margin-bottom: 16px;">
-                <label>Inspect Local Storage JSON</label>
-                <div class="prompt-box" id="storageInspectBox" style="max-height:140px; font-size:11px;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label style="margin:0;">Inspect / Copy Raw JSON</label>
+                    <button class="btn btn-outline" style="font-size:11px; padding:4px 10px;" onclick="selectAndCopyInspectBox()">Select & Copy</button>
+                </div>
+                <textarea id="storageInspectBox" readonly style="width:100%; height:160px; font-family: monospace; font-size:11px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; resize:vertical;"></textarea>
             </div>
 
             <button class="btn btn-danger" style="width:100%; font-weight:700;" onclick="resetLocalStorage()">Reset All Local Storage Data</button>
@@ -1044,20 +1081,96 @@ let syncStatus = 'local'; // 'local' | 'synced' | 'syncing' | 'offline' | 'error
 let isOfflinePendingSync = false;
 let syncDebounceTimeout = null;
 
-// Initialize Supabase Client
+// Multi-tier storage adapter (Memory + localStorage + Cookie) for resilient iOS Safari & PWA support
+const memCache = {};
+
+function setStorageItem(key, value) {
+    memCache[key] = value;
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.setItem(key, value);
+        }
+    } catch(e) {}
+    try {
+        const encoded = encodeURIComponent(value);
+        if (encoded.length < 3800) {
+            const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+            document.cookie = key + "=" + encoded + "; path=/; max-age=31536000; SameSite=Lax" + secureFlag;
+        }
+    } catch(e) {}
+}
+
+function getStorageItem(key) {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            const val = localStorage.getItem(key);
+            if (val !== null && val !== undefined) return val;
+        }
+    } catch(e) {}
+    
+    if (memCache[key] !== undefined) return memCache[key];
+
+    try {
+        const nameEQ = key + "=";
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+        }
+    } catch(e) {}
+    return null;
+}
+
+function removeStorageItem(key) {
+    delete memCache[key];
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.removeItem(key);
+        }
+    } catch(e) {}
+    try {
+        const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = key + '=; Max-Age=0; path=/; SameSite=Lax' + secureFlag;
+    } catch(e) {}
+}
+
+// Initialize Supabase Client with iOS/Safari resilient storage wrapper
+let isInitSupabasePolling = false;
+
 function initSupabase() {
+    if (supabaseClient) return;
     try {
         if (window.supabase && window.supabase.createClient) {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
                 auth: {
                     persistSession: true,
                     autoRefreshToken: true,
-                    detectSessionInUrl: true
+                    detectSessionInUrl: true,
+                    storage: {
+                        getItem: (key) => getStorageItem(key),
+                        setItem: (key, value) => setStorageItem(key, value),
+                        removeItem: (key) => removeStorageItem(key)
+                    }
                 }
             });
+            console.log("Supabase client initialized.");
             setupSupabaseAuth();
-        } else {
-            console.warn("Supabase library not loaded yet.");
+        } else if (!isInitSupabasePolling) {
+            isInitSupabasePolling = true;
+            let attempts = 0;
+            const timer = setInterval(() => {
+                attempts++;
+                if (window.supabase && window.supabase.createClient) {
+                    clearInterval(timer);
+                    isInitSupabasePolling = false;
+                    initSupabase();
+                } else if (attempts > 50) {
+                    clearInterval(timer);
+                    isInitSupabasePolling = false;
+                    console.warn("Supabase library load timeout.");
+                }
+            }, 80);
         }
     } catch(e) {
         console.error("Supabase init error:", e);
@@ -1085,7 +1198,7 @@ const DEFAULT_DATA = {
     completedWorkouts: {},
     plan: null,
     exerciseDB: {},
-    lastModified: Date.now()
+    lastModified: 0
 };
 
 let appData = loadData();
@@ -1097,37 +1210,35 @@ let currentMonth = currentDate.getMonth();
 let currentYear = currentDate.getFullYear();
 let selectedDateStr = new Date().toISOString().slice(0,10);
 
-// Storage Management with Cookie Fallback
-function setStorageItem(key, value) {
-    try {
-        localStorage.setItem(key, value);
-    } catch(e) {
-        document.cookie = key + "=" + encodeURIComponent(value) + "; path=/; max-age=31536000";
-    }
-}
-
-function getStorageItem(key) {
-    try {
-        const val = localStorage.getItem(key);
-        if (val) return val;
-    } catch(e) {}
-    
-    const nameEQ = key + "=";
-    const ca = document.cookie.split(';');
-    for(let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
-    }
-    return null;
-}
-
 function loadData() {
     const saved = getStorageItem('trit_data');
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
-            return deepMerge(DEFAULT_DATA, parsed);
+            const merged = deepMerge(DEFAULT_DATA, parsed);
+
+            // STRICT PROTECTION: Never let defaults or updates overwrite or alter user's existing plans!
+            if (parsed.plan && parsed.plan.weeks && parsed.plan.weeks.length > 0) {
+                merged.plan = parsed.plan;
+            }
+            if (parsed.completedWorkouts) {
+                merged.completedWorkouts = parsed.completedWorkouts;
+            }
+            if (parsed.runs && parsed.runs.length > 0) {
+                merged.runs = parsed.runs;
+            }
+
+            // AUTO-HEAL: If planStartDate was set to 2026-09-07 or 2026-09-13 (from previous week defaults),
+            // align it with the athlete's active plan that started yesterday Monday Sep 14, 2026.
+            if (merged.profile && (merged.profile.planStartDate === '2026-09-07' || merged.profile.planStartDate === '2026-09-13')) {
+                merged.profile.planStartDate = '2026-09-14';
+                if (merged.profile.currentWeek === 2) {
+                    merged.profile.currentWeek = 1;
+                }
+                setStorageItem('trit_data', JSON.stringify(merged));
+            }
+
+            return merged;
         } catch(e) { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
     }
     return JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -1167,11 +1278,36 @@ function saveData(skipCloudSync = false) {
     }
 }
 
-// Auto-save on page hide/unload (Safari iOS tab closing & navigation fix)
-window.addEventListener('beforeunload', () => saveData(true));
-window.addEventListener('pagehide', () => saveData(true));
+// Save local storage on page hide/unload & iOS app switching without advancing lastModified timestamp
+function flushStorage() {
+    try {
+        setStorageItem('trit_data', JSON.stringify(appData));
+    } catch(e) {}
+}
+
+window.addEventListener('beforeunload', flushStorage);
+window.addEventListener('pagehide', flushStorage);
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        flushStorage();
+        if (syncDebounceTimeout) {
+            clearTimeout(syncDebounceTimeout);
+            syncDebounceTimeout = null;
+            if (supabaseClient && currentUser && navigator.onLine) {
+                syncToSupabase();
+            }
+        }
+    } else if (document.visibilityState === 'visible') {
+        // When user resumes or re-opens app on iPhone, refresh session & remote sync
+        if (supabaseClient && currentUser && navigator.onLine) {
+            handleUserLoginSync();
+        }
+    }
+});
 
 // Supabase Auth and Cloud Synchronization
+let isInitialSyncDone = false;
+
 async function setupSupabaseAuth() {
     if (!supabaseClient) return;
 
@@ -1181,8 +1317,10 @@ async function setupSupabaseAuth() {
             currentUser = session.user;
             updateSyncStatusUI('synced');
             updateProfileSettingsUI();
-            // Pull newest cloud state in the background
-            handleUserLoginSync();
+            if (!isInitialSyncDone) {
+                isInitialSyncDone = true;
+                handleUserLoginSync();
+            }
         } else {
             currentUser = null;
             updateSyncStatusUI('local');
@@ -1194,20 +1332,24 @@ async function setupSupabaseAuth() {
 
     // Handle Auth state change & email confirmation redirects
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
-        console.log("Auth state change:", event, session);
+        console.log("Auth state change:", event, session ? session.user.email : 'no session');
         if (session && session.user) {
             const isNewLogin = (!currentUser || currentUser.id !== session.user.id);
             currentUser = session.user;
+            updateProfileSettingsUI();
             
-            if (event === 'SIGNED_IN' && isNewLogin) {
-                showToast(`Welcome, ${session.user.email}!`);
+            if (event === 'SIGNED_IN' || (!isInitialSyncDone && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
+                isInitialSyncDone = true;
+                if (isNewLogin) {
+                    showToast(`Welcome, ${session.user.email}!`);
+                }
                 await handleUserLoginSync();
             } else if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
                 updateSyncStatusUI('synced');
             }
-            updateProfileSettingsUI();
         } else {
             currentUser = null;
+            isInitialSyncDone = false;
             updateSyncStatusUI('local');
             updateProfileSettingsUI();
         }
@@ -1237,68 +1379,87 @@ async function setupSupabaseAuth() {
     }
 }
 
-// When logging in: Fetch user state from Supabase (user_metadata + user_data table), overwrite local state
-async function handleUserLoginSync() {
-    if (!supabaseClient || !currentUser) return;
-    updateSyncStatusUI('syncing');
+// Fetch remote cloud data from user_data table AND user_metadata
+async function fetchRemoteCloudData() {
+    if (!supabaseClient || !currentUser) return { remoteData: null, remoteTimestamp: 0 };
 
+    let remoteData = null;
+    let remoteTimestamp = 0;
+
+    // 1. Primary: Check PostgreSQL 'user_data' table
     try {
-        // 1. Refresh currentUser to ensure we have the absolute latest user_metadata from server
+        const { data: tableRow, error: tableErr } = await supabaseClient
+            .from('user_data')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+
+        if (!tableErr && tableRow && (tableRow.data || tableRow.payload)) {
+            const tablePayload = tableRow.data || tableRow.payload;
+            const tableTime = new Date(tableRow.updated_at || 0).getTime() || (tablePayload && tablePayload.lastModified) || 0;
+            remoteData = tablePayload;
+            remoteTimestamp = tableTime;
+        } else if (tableErr) {
+            console.warn("user_data table query notice:", tableErr.message || tableErr);
+        }
+    } catch (tblErr) {
+        console.warn("Table query exception:", tblErr);
+    }
+
+    // 2. Secondary fallback: Check user_metadata
+    if (!remoteData) {
         try {
             const { data: userData } = await supabaseClient.auth.getUser();
             if (userData && userData.user) {
                 currentUser = userData.user;
             }
-        } catch (uErr) {
-            console.warn("User refresh note:", uErr);
-        }
+        } catch (uErr) {}
 
-        let remoteData = null;
-        let remoteTimestamp = 0;
-
-        // Check user_metadata (natively supported on ALL Supabase instances without needing any SQL tables)
-        if (currentUser && currentUser.user_metadata && currentUser.user_metadata.trit_payload) {
-            remoteData = currentUser.user_metadata.trit_payload;
-            remoteTimestamp = currentUser.user_metadata.trit_last_sync || remoteData.lastModified || 0;
-        }
-
-        // Also check user_data table if the table exists in user's Supabase database
-        try {
-            const { data: tableRow, error: tableErr } = await supabaseClient
-                .from('user_data')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .maybeSingle();
-
-            if (!tableErr && tableRow && (tableRow.data || tableRow.payload)) {
-                const tablePayload = tableRow.data || tableRow.payload;
-                const tableTime = new Date(tableRow.updated_at || 0).getTime() || tablePayload.lastModified || 0;
-                if (tableTime >= remoteTimestamp || !remoteData) {
-                    remoteData = tablePayload;
-                    remoteTimestamp = tableTime;
-                }
+        if (currentUser && currentUser.user_metadata) {
+            let metaPayload = currentUser.user_metadata.trit_payload;
+            if (typeof metaPayload === 'string') {
+                try { metaPayload = JSON.parse(metaPayload); } catch(e) {}
             }
-        } catch (tblErr) {
-            // Table doesn't exist - this is expected if user didn't run SQL DDL
+            if (metaPayload) {
+                remoteData = metaPayload;
+                remoteTimestamp = currentUser.user_metadata.trit_last_sync || (remoteData && remoteData.lastModified) || 0;
+            }
         }
+    }
+
+    return { remoteData, remoteTimestamp };
+}
+
+// When logging in: Fetch user state from Supabase, prioritize cloud plan over empty device
+async function handleUserLoginSync() {
+    if (!supabaseClient || !currentUser) return;
+    updateSyncStatusUI('syncing');
+
+    try {
+        const { remoteData, remoteTimestamp } = await fetchRemoteCloudData();
 
         const localTime = appData.lastModified || 0;
-        const localHasData = (appData.runs && appData.runs.length > 0) || 
+        const remoteHasPlan = !!(remoteData && remoteData.plan && remoteData.plan.weeks && remoteData.plan.weeks.length > 0);
+        const localHasPlan = !!(appData.plan && appData.plan.weeks && appData.plan.weeks.length > 0);
+        const remoteHasWorkouts = !!(remoteData && remoteData.runs && remoteData.runs.length > 0);
+        const localHasWorkouts = !!(appData.runs && appData.runs.length > 0);
+        const localHasCustomData = localHasPlan || localHasWorkouts || 
                              (appData.customEvents && appData.customEvents.length > 0) ||
-                             (appData.plan && appData.plan.weeks && appData.plan.weeks.length > 0) ||
-                             (appData.profile && appData.profile.age && appData.profile.age !== 28);
+                             (appData.profile && (appData.profile.raceDate || (appData.profile.age && appData.profile.age !== 28)));
 
         if (remoteData) {
-            // Remote has data!
-            // If remote is newer, or if this device only had fresh default data, restore remote state:
-            if (remoteTimestamp >= localTime || !localHasData) {
+            // Decisive sync rule for multiple devices:
+            // If remote has a plan or workouts and this device does not, REMOTE WINS unconditionally!
+            const remoteIsSubstantiallyRicher = (remoteHasPlan && !localHasPlan) || (remoteHasWorkouts && !localHasWorkouts && !localHasPlan);
+
+            if (remoteIsSubstantiallyRicher || remoteTimestamp >= localTime || !localHasCustomData) {
                 appData = deepMerge(DEFAULT_DATA, remoteData);
-                appData.lastModified = Math.max(remoteTimestamp, Date.now());
+                appData.lastModified = Math.max(remoteTimestamp, localTime, Date.now());
                 setStorageItem('trit_data', JSON.stringify(appData));
                 renderAllPages();
-                showToast("Cloud data synchronized!");
+                showToast("Cloud workouts & plan synchronized!");
             } else {
-                // Local state was modified offline with newer changes; sync up to cloud!
+                // Local state has newer workouts: push up to cloud!
                 await syncToSupabase();
                 showToast("Local updates saved to cloud!");
             }
@@ -1337,7 +1498,7 @@ function scheduleCloudSync() {
     }, 600);
 }
 
-// Upsert state directly to user_metadata and optionally to table "user_data"
+// Upsert state directly to table "user_data" (primary) and user_metadata timestamp (secondary)
 async function syncToSupabase() {
     if (!supabaseClient || !currentUser) return;
 
@@ -1352,33 +1513,42 @@ async function syncToSupabase() {
         const now = Date.now();
         appData.lastModified = now;
 
-        // 1. Primary: Save directly to Supabase Auth user_metadata
-        // Guaranteed to work across all projects without needing any SQL migrations
-        const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
-            data: {
-                trit_payload: appData,
-                trit_last_sync: now,
-                updated_at: new Date().toISOString()
-            }
-        });
-
-        if (metaErr) {
-            console.warn("Metadata update note:", metaErr.message);
-        } else if (updatedUser && updatedUser.user) {
-            currentUser = updatedUser.user;
-        }
-
-        // 2. Secondary: If table user_data exists, upsert there too
+        // 1. Primary: Upsert directly to PostgreSQL table 'user_data'
         try {
-            await supabaseClient
+            const { error: tblErr } = await supabaseClient
                 .from('user_data')
                 .upsert({
                     user_id: currentUser.id,
                     data: appData,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date(now).toISOString()
                 }, { onConflict: 'user_id' });
+
+            if (tblErr) {
+                console.warn("user_data upsert notice:", tblErr.message || tblErr);
+            }
         } catch (tblErr) {
-            // Table might not exist; safe to ignore
+            console.warn("user_data exception:", tblErr);
+        }
+
+        // 2. Secondary: Update timestamp and payload in auth metadata
+        try {
+            const metaPayload = (JSON.stringify(appData).length < 30000) ? appData : null;
+            const updateMeta = {
+                trit_last_sync: now,
+                updated_at: new Date(now).toISOString()
+            };
+            if (metaPayload) {
+                updateMeta.trit_payload = metaPayload;
+            }
+            const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
+                data: updateMeta
+            });
+
+            if (!metaErr && updatedUser && updatedUser.user) {
+                currentUser = updatedUser.user;
+            }
+        } catch (mErr) {
+            console.warn("user_metadata update notice:", mErr);
         }
 
         isOfflinePendingSync = false;
@@ -1527,11 +1697,14 @@ async function authSignUp(email, password) {
             return;
         }
 
+        const cleanEmail = (email || '').trim().toLowerCase();
+        const cleanPassword = (password || '').trim();
+
         // Scenario 2: Attempt immediate sign in in case project auto-confirmed
         try {
             const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
-                email: email.trim(),
-                password: password
+                email: cleanEmail,
+                password: cleanPassword
             });
             if (!signInErr && signInData && signInData.session) {
                 currentUser = signInData.user;
@@ -1548,7 +1721,10 @@ async function authSignUp(email, password) {
             authMsg.innerHTML = `
                 <div style="font-weight:700; color:#f59e0b; margin-bottom:6px;">Verification Link Sent</div>
                 <div style="color:var(--text-primary); line-height:1.5;">
-                    Account created for <strong style="color:#ffffff;">${email.trim()}</strong>! Please check your email to confirm your account.
+                    Account created for <strong style="color:#ffffff;">${cleanEmail}</strong>! Please check your email to confirm your account.
+                </div>
+                <div style="margin-top:8px; font-size:12px; color:var(--text-secondary); line-height:1.4;">
+                    <strong>iPhone Notice:</strong> Once confirmed via email, return here and tap <strong>Log In</strong> with your email and password.
                 </div>
             `;
             authMsg.style.display = 'block';
@@ -1565,10 +1741,16 @@ async function authSignUp(email, password) {
 
 async function authSignIn(email, password) {
     if (!supabaseClient) {
-        showToast("Supabase client not ready.");
-        return;
+        initSupabase();
+        if (!supabaseClient) {
+            showToast("Connecting to cloud service, please try again in a moment...");
+            return;
+        }
     }
-    if (!email || !password) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
+
+    if (!cleanEmail || !cleanPassword) {
         showToast("Please enter email and password.");
         return;
     }
@@ -1582,8 +1764,8 @@ async function authSignIn(email, password) {
 
     try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({
-            email: email.trim(),
-            password: password
+            email: cleanEmail,
+            password: cleanPassword
         });
 
         if (error) {
@@ -1686,7 +1868,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!appData.profile.hasSeenGuide) {
         openGuide();
         appData.profile.hasSeenGuide = true;
-        saveData();
+        setStorageItem('trit_data', JSON.stringify(appData));
     }
     const evDateEl = document.getElementById('evDate');
     if (evDateEl) evDateEl.value = new Date().toISOString().slice(0,10);
@@ -2025,36 +2207,105 @@ function getTodayQuote(rawQuote) {
     return rawQuote.replace(/^"|"$/g, '').trim();
 }
 
+// Clean export payload guaranteed to include all logged activities, completions, plan, and events
+function getCleanExportData() {
+    return {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        profile: appData.profile || {},
+        runs: appData.runs || [],
+        completedWorkouts: appData.completedWorkouts || {},
+        customEvents: appData.customEvents || [],
+        customCategories: appData.customCategories || [],
+        exerciseDB: appData.exerciseDB || {},
+        plan: appData.plan || null,
+        lastModified: appData.lastModified || Date.now()
+    };
+}
+
 // Data Modal (Dev only)
 function openDataModal() {
-    const saved = getStorageItem('trit_data') || JSON.stringify(appData);
-    const bytes = new Blob([saved]).size;
+    const exportObj = getCleanExportData();
+    const jsonStr = JSON.stringify(exportObj, null, 2);
+    const bytes = new Blob([jsonStr]).size;
     const kb = (bytes / 1024).toFixed(2);
+    const completedCount = Object.keys(exportObj.completedWorkouts).length;
+    const runsCount = exportObj.runs.length;
     
-    document.getElementById('storageStatus').textContent = `Key: 'trit_data' (${kb} KB stored locally) | Mode: ${currentUser ? 'Cloud (Supabase)' : 'Local'}`;
-    document.getElementById('storageInspectBox').textContent = JSON.stringify(appData, null, 2);
+    document.getElementById('storageStatus').textContent = `Size: ${kb} KB | ${runsCount} logged activities | ${completedCount} workout completions | Mode: ${currentUser ? 'Cloud' : 'Local'}`;
+    const inspectBox = document.getElementById('storageInspectBox');
+    if (inspectBox) inspectBox.value = jsonStr;
     document.getElementById('dataModal').classList.add('active');
 }
 
-function exportDataJSON() {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `trit_data_backup_${new Date().toISOString().slice(0,10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    showToast('JSON backup exported!');
+async function exportDataJSON() {
+    const exportObj = getCleanExportData();
+    const jsonStr = JSON.stringify(exportObj, null, 2);
+    const filename = `trit_backup_${new Date().toISOString().slice(0,10)}.json`;
+    
+    const inspectBox = document.getElementById('storageInspectBox');
+    if (inspectBox) inspectBox.value = jsonStr;
+
+    // 1. Primary on iPhone/iPad: Native Web Share API with file support
+    if (navigator.canShare && typeof File !== 'undefined') {
+        try {
+            const file = new File([jsonStr], filename, { type: 'application/json' });
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: 'trit Training Backup',
+                    text: 'trit workout & plan data backup',
+                    files: [file]
+                });
+                showToast('Export shared successfully!');
+                return;
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') return; // User closed share sheet
+            console.warn('Share file fallback:', e);
+        }
+    }
+
+    // 2. Standard Blob download for desktop and Android
+    try {
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.href = blobUrl;
+        downloadAnchor.download = filename;
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        setTimeout(() => {
+            document.body.removeChild(downloadAnchor);
+            URL.revokeObjectURL(blobUrl);
+        }, 1000);
+        showToast('JSON backup file downloaded!');
+        return;
+    } catch(e) {
+        console.warn('Direct download exception:', e);
+    }
+
+    // 3. Fallback: Copy to clipboard
+    copyDataJSON();
 }
 
 function copyDataJSON() {
-    const jsonStr = JSON.stringify(appData, null, 2);
-    navigator.clipboard.writeText(jsonStr).then(() => showToast('Data copied to clipboard!')).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = jsonStr;
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-        showToast('Data copied to clipboard!');
-    });
+    const exportObj = getCleanExportData();
+    const jsonStr = JSON.stringify(exportObj, null, 2);
+    const inspectBox = document.getElementById('storageInspectBox');
+    if (inspectBox) {
+        inspectBox.value = jsonStr;
+    }
+    copyTextToClipboard(jsonStr, 'All activities, completions & data copied!');
+}
+
+function selectAndCopyInspectBox() {
+    const inspectBox = document.getElementById('storageInspectBox');
+    if (inspectBox) {
+        inspectBox.focus();
+        inspectBox.select();
+        inspectBox.setSelectionRange(0, inspectBox.value.length);
+        copyTextToClipboard(inspectBox.value, 'Full JSON copied to clipboard!');
+    }
 }
 
 function importDataJSON() {
@@ -2062,15 +2313,24 @@ function importDataJSON() {
     if (!input) { showToast('Paste JSON backup first'); return; }
     try {
         const parsed = JSON.parse(input);
+        if (!parsed || typeof parsed !== 'object') throw new Error('Invalid JSON format');
         appData = deepMerge(DEFAULT_DATA, parsed);
+        if (parsed.completedWorkouts) {
+            appData.completedWorkouts = Object.assign({}, parsed.completedWorkouts);
+        }
+        if (Array.isArray(parsed.runs)) {
+            appData.runs = [...parsed.runs];
+        }
         saveData();
-        showToast('Data restored successfully!');
+        showToast('Data & completed workouts restored successfully!');
         document.getElementById('importJsonInput').value = '';
         closeModal('dataModal');
         renderDashboard();
         if (document.getElementById('page-plan').classList.contains('active')) renderPlan();
+        if (document.getElementById('page-calendar').classList.contains('active')) renderCalendar();
+        if (document.getElementById('page-history').classList.contains('active')) renderHistory();
     } catch(e) {
-        showToast('Invalid JSON data format');
+        showToast('Invalid JSON data: ' + e.message);
     }
 }
 
@@ -2162,34 +2422,43 @@ function renderCalendar() {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     document.getElementById('calendarMonthYear').textContent = `${monthNames[currentMonth]} ${currentYear}`;
 
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const offset = firstDay === 0 ? 6 : firstDay - 1; 
+    // UTC-based first day of month (0 = Sun, 1 = Mon, ..., 6 = Sat)
+    const firstDayUTC = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
+    // UTC-based number of days in the current month
+    const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
+    // Monday-based offset (Mon=0, Tue=1, ..., Sun=6)
+    const offset = (firstDayUTC === 0) ? 6 : (firstDayUTC - 1);
 
     for (let i = 0; i < offset; i++) {
         grid.innerHTML += `<div class="calendar-day empty"></div>`;
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     for (let i = 1; i <= daysInMonth; i++) {
-        const dateObj = new Date(Date.UTC(currentYear, currentMonth, i));
-        const dateStr = dateObj.toISOString().slice(0, 10);
+        const y = currentYear;
+        const m = String(currentMonth + 1).padStart(2, '0');
+        const d = String(i).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
         
         let classes = 'calendar-day';
         if (dateStr === todayStr) classes += ' today';
         if (dateStr === selectedDateStr) classes += ' selected';
 
-        const customEvents = appData.customEvents.filter(e => e.date === dateStr);
+        const customEvents = (appData.customEvents || []).filter(e => e.date === dateStr);
         const planWorkouts = getPlanWorkoutsForDate(dateStr);
         
         let eventHTML = '';
         
         planWorkouts.forEach(w => {
             let typeColor = 'var(--accent)';
-            if(w.type.toLowerCase().includes('bike')) typeColor = 'var(--green)';
-            if(w.type.toLowerCase().includes('swim')) typeColor = 'var(--blue)';
-            eventHTML += `<div class="mini-event" style="border-left-color: ${typeColor}">${w.type}</div>`;
+            const lowerType = (w.type || '').toLowerCase();
+            if (lowerType.includes('bike')) typeColor = 'var(--green)';
+            else if (lowerType.includes('swim')) typeColor = 'var(--blue)';
+            else if (lowerType.includes('rest')) typeColor = 'var(--text-dim)';
+            const check = w.completed ? '✓ ' : '';
+            eventHTML += `<div class="mini-event ${w.completed ? 'completed' : ''}" style="border-left-color: ${typeColor}">${check}${w.type}</div>`;
         });
 
         customEvents.forEach(e => {
@@ -2202,6 +2471,10 @@ function renderCalendar() {
                 <div class="day-events-container">${eventHTML}</div>
             </div>
         `;
+    }
+    const calStartEl = document.getElementById('calPlanStartDisplay');
+    if (calStartEl) {
+        calStartEl.textContent = appData.profile.planStartDate ? formatISODateFriendly(appData.profile.planStartDate) : 'Not set';
     }
     updateSelectedEventsList();
 }
@@ -2431,19 +2704,34 @@ function updateSelectedEventsList() {
     
     planWorkouts.forEach(w => {
         let typeColor = 'var(--accent)';
-        if(w.type.toLowerCase().includes('bike')) typeColor = 'var(--green)';
-        if(w.type.toLowerCase().includes('swim')) typeColor = 'var(--blue)';
+        const lowerType = (w.type || '').toLowerCase();
+        if (lowerType.includes('bike')) typeColor = 'var(--green)';
+        else if (lowerType.includes('swim')) typeColor = 'var(--blue)';
+        else if (lowerType.includes('rest')) typeColor = 'var(--text-dim)';
 
         html += `
-        <div class="event-card">
+        <div class="event-card ${w.completed ? 'completed' : ''}" style="${w.completed ? 'border-color: rgba(16, 185, 129, 0.4);' : ''}">
             <div style="position: absolute; top: 0; right: 0; width: 80px; height: 80px; background: radial-gradient(circle, ${typeColor}30 0%, transparent 70%); border-radius: 50%; transform: translate(30%, -30%); pointer-events: none; z-index: 1;"></div>
             <div class="event-card-header">
-                <span>AI Plan • Week ${w.weekNum}</span>
-                <span class="workout-type type-${w.type.toLowerCase()}">${w.type}</span>
+                <span>AI Plan • Week ${w.weekNum} ${w.completed ? '• <strong style="color:var(--green);">✓ Completed</strong>' : ''}</span>
+                <span class="workout-type type-${lowerType.replace(/\s+/g, '')}">${w.type}</span>
             </div>
-            <div class="event-card-title">${w.title}</div>
-            <div class="event-card-meta">${w.distance || ''} ${w.duration ? '• '+w.duration : ''}</div>
-            <button class="btn btn-outline" style="margin-top:10px; font-size:11px; padding:6px; position:relative; z-index:5;" onclick="showPage('plan'); selectWeek(${w.weekNum});">Go to Plan</button>
+            <div class="event-card-title" style="${w.completed ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${w.title}</div>
+            <div class="event-card-meta">
+                ${w.distance ? w.distance : ''} ${w.duration ? '• '+w.duration : ''} ${w.pace ? '• '+w.pace : ''}
+                ${w.desc ? '<div style="color:var(--text-secondary); font-size:12px; margin-top:4px;">' + parseExerciseTerms(w.desc) + '</div>' : ''}
+            </div>
+            <div style="display:flex; gap:8px; margin-top:10px; position:relative; z-index:5;">
+                <button class="btn ${w.completed ? 'btn-accent' : 'btn-outline'}" style="flex:1; font-size:11px; padding:6px 10px;" onclick="toggleWorkout('${w.key}'); renderCalendar();">
+                    ${w.completed ? '✓ Completed' : 'Mark Done'}
+                </button>
+                <button class="btn btn-outline" style="flex:1; font-size:11px; padding:6px 10px;" onclick="startLogWizard('${w.type}', '${selectedDateStr}', '${w.key}')">
+                    Log Activity
+                </button>
+                <button class="btn btn-outline" style="font-size:11px; padding:6px 10px;" onclick="showPage('plan'); selectWeek(${w.weekNum});" title="View in Plan">
+                    Plan
+                </button>
+            </div>
         </div>`;
     });
 
@@ -2473,31 +2761,97 @@ function updateSelectedEventsList() {
     list.innerHTML = html;
 }
 
+const WEEKDAY_NAMES_MON_FIRST = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function parseISODateParts(str) {
+    if (!str || typeof str !== 'string') return null;
+    const parts = str.slice(0, 10).split('-').map(Number);
+    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return null;
+    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
+}
+
+function getMondayOfDateUTC(utcDate) {
+    const day = utcDate.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    if (day === 0) {
+        // If an athlete selected Sunday as their plan start date, align to Monday kickoff of that training week
+        return new Date(utcDate.getTime() + (1 * 86400000));
+    }
+    const daysSinceMonday = day - 1;
+    return new Date(utcDate.getTime() - (daysSinceMonday * 86400000));
+}
+
+function getDayNameUTC(utcDate) {
+    const day = utcDate.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const idx = (day === 0) ? 6 : (day - 1);
+    return WEEKDAY_NAMES_MON_FIRST[idx];
+}
+
+function formatISODateFriendly(isoStr) {
+    if (!isoStr) return '—';
+    const p = parseISODateParts(isoStr);
+    if (!p) return isoStr;
+    const dayName = getDayNameUTC(p);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${dayName.slice(0,3)}, ${monthNames[p.getUTCMonth()]} ${p.getUTCDate()}, ${p.getUTCFullYear()}`;
+}
+
+function updatePlanStartDate(newDateStr) {
+    if (!newDateStr) return;
+    appData.profile.planStartDate = newDateStr;
+    const sdEl = document.getElementById('pPlanStartDate');
+    if (sdEl) sdEl.value = newDateStr;
+    const quickEl = document.getElementById('planQuickStartDate');
+    if (quickEl) quickEl.value = newDateStr;
+    saveData();
+    renderPlan();
+    renderCalendar();
+    showToast("Plan start date updated: " + formatISODateFriendly(newDateStr));
+}
+
+function setPlanStartToYesterday() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    updatePlanStartDate(yStr);
+}
+
+function setPlanStartToThisMonday() {
+    const now = new Date();
+    const day = now.getDay();
+    const daysSinceMon = (day === 0) ? 6 : (day - 1);
+    const mon = new Date(now.getTime() - (daysSinceMon * 86400000));
+    const mStr = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+    updatePlanStartDate(mStr);
+}
+
 function getPlanWorkoutsForDate(dateStr) {
-    if(!appData.plan || !appData.plan.weeks || !appData.profile.planStartDate) return [];
-    const startDate = new Date(appData.profile.planStartDate);
-    startDate.setUTCHours(0,0,0,0);
+    if (!appData.plan || !appData.plan.weeks || !appData.profile.planStartDate) return [];
     
-    const targetDate = new Date(dateStr);
-    targetDate.setUTCHours(0,0,0,0);
-    
-    const diffTime = targetDate.getTime() - startDate.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if(diffDays < 0) return []; 
-    
-    const weekIdx = Math.floor(diffDays / 7);
-    const weekNum = weekIdx + 1;
-    
-    const daysArr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    let dayIdx = (startDate.getDay() + diffDays - 1) % 7;
-    if(dayIdx < 0) dayIdx += 7;
-    const dayName = daysArr[dayIdx];
+    const startUTC = parseISODateParts(appData.profile.planStartDate);
+    const targetUTC = parseISODateParts(dateStr);
+    if (!startUTC || !targetUTC) return [];
+
+    // Week 1 starts on Monday of the planStartDate week
+    const week1Monday = getMondayOfDateUTC(startUTC);
+    const diffTime = targetUTC.getTime() - week1Monday.getTime();
+    const diffDays = Math.floor(diffTime / 86400000);
+    if (diffDays < 0) return []; // Date is before Week 1 Monday
+
+    const weekNum = Math.floor(diffDays / 7) + 1;
+    const targetDayName = getDayNameUTC(targetUTC);
 
     const week = appData.plan.weeks.find(w => w.week === weekNum);
-    if(!week) return [];
-    
-    return week.workouts.filter(w => w.day === dayName).map(w => ({...w, weekNum}));
+    if (!week || !week.workouts) return [];
+
+    const matches = [];
+    week.workouts.forEach((w, idx) => {
+        if (w.day && w.day.trim().toLowerCase() === targetDayName.toLowerCase()) {
+            const key = `w${weekNum}_${idx}`;
+            const completed = !!appData.completedWorkouts[key];
+            matches.push({ ...w, weekNum, originalIdx: idx, key, completed });
+        }
+    });
+    return matches;
 }
 
 // Collapsible AI Insight Handler
@@ -2549,14 +2903,26 @@ function renderPlan() {
     document.getElementById('weekSelector').innerHTML = plan.weeks.map(w => `
         <button class="week-btn ${w.week === currentWeek ? 'active' : ''}" onclick="selectWeek(${w.week})">W${w.week}</button>
     `).join('');
+
+    // Update plan quick start date controls
+    const quickDateInput = document.getElementById('planQuickStartDate');
+    const quickDateLabel = document.getElementById('planStartDateLabel');
+    if (quickDateInput && appData.profile.planStartDate) {
+        quickDateInput.value = appData.profile.planStartDate;
+    }
+    if (quickDateLabel && appData.profile.planStartDate) {
+        quickDateLabel.textContent = `(${formatISODateFriendly(appData.profile.planStartDate)})`;
+    }
     
     selectWeek(currentWeek);
 }
 
 function selectWeek(weekNum) {
     if(!appData.plan || !appData.plan.weeks) return;
-    appData.profile.currentWeek = weekNum;
-    saveData();
+    if (appData.profile.currentWeek !== weekNum) {
+        appData.profile.currentWeek = weekNum;
+        saveData();
+    }
 
     document.querySelectorAll('.week-btn').forEach(b => {
         b.classList.remove('active');
@@ -2664,21 +3030,40 @@ function switchAITab(mode) {
     if (promptOut) promptOut.textContent = 'Click Generate to begin...';
 }
 
-function copyTextToClipboard(text) {
+function copyTextToClipboard(text, toastMsg = 'Copied to clipboard!') {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => fallbackClipboardCopy(text));
+        navigator.clipboard.writeText(text).then(() => {
+            if (toastMsg) showToast(toastMsg);
+        }).catch(() => {
+            fallbackClipboardCopy(text);
+            if (toastMsg) showToast(toastMsg);
+        });
     } else {
         fallbackClipboardCopy(text);
+        if (toastMsg) showToast(toastMsg);
     }
 }
 
 function fallbackClipboardCopy(text) {
     const ta = document.createElement('textarea');
     ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0.01';
+    ta.style.pointerEvents = 'none';
     document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
+    ta.focus();
+    ta.setSelectionRange(0, text.length);
+    let successful = false;
+    try {
+        successful = document.execCommand('copy');
+    } catch(err) {
+        console.warn('execCommand copy error:', err);
+    }
     document.body.removeChild(ta);
+    return successful;
 }
 
 function generatePrompt() {
@@ -2693,26 +3078,36 @@ function formatPlanForPrompt(plan, currentWeekNum) {
 
     const lines = [];
 
-    // 1. Past weeks summary (what the user had done)
+    // 1. Past weeks summary and workout completions (what the user executed)
     const pastWeeks = plan.weeks.filter(w => w.week < currentWeekNum);
     if (pastWeeks.length > 0) {
-        lines.push(`=== PAST WEEKS (COMPLETED / PREVIOUS) ===`);
+        lines.push(`=== PAST WEEKS & LOGGED COMPLETIONS (WHAT THE USER HAS DONE) ===`);
         pastWeeks.forEach(w => {
             const completedCount = w.workouts.filter((_, idx) => appData.completedWorkouts[`w${w.week}_${idx}`]).length;
-            lines.push(`• Week ${w.week} (${w.phase}): ${completedCount}/${w.workouts.length} scheduled workouts logged/completed. Focus: ${w.description || 'Base fitness'}`);
+            lines.push(`• Week ${w.week} (${w.phase}) — ${completedCount}/${w.workouts.length} workouts completed. Focus: ${w.description || 'Base fitness'}`);
+            w.workouts.forEach((wo, idx) => {
+                const isDone = !!appData.completedWorkouts[`w${w.week}_${idx}`];
+                const statusTag = isDone ? "[COMPLETED ✓]" : "[MISSED / PENDING]";
+                const metrics = [
+                    wo.distance ? `Dist: ${wo.distance}` : '',
+                    wo.duration ? `Duration: ${wo.duration}` : '',
+                    wo.pace ? `Pace: ${wo.pace}` : ''
+                ].filter(Boolean).join(', ');
+                lines.push(`    - ${wo.day} (${wo.type}) ${statusTag}: "${wo.title}"${metrics ? ` [${metrics}]` : ''}`);
+            });
         });
         lines.push('');
     }
 
-    // 2. Current Week (the initial plan they had for this active week)
+    // 2. Current Active Week
     const currentW = plan.weeks.find(w => w.week === currentWeekNum);
     if (currentW) {
         lines.push(`=== CURRENT ACTIVE WEEK: WEEK ${currentW.week} (${currentW.phase}) ===`);
         lines.push(`Focus: ${currentW.description || 'Current training target'}`);
-        lines.push(`Initial schedule for this week:`);
+        lines.push(`Scheduled workouts and status:`);
         currentW.workouts.forEach((wo, idx) => {
             const isDone = !!appData.completedWorkouts[`w${currentW.week}_${idx}`];
-            const statusTag = isDone ? "[COMPLETED]" : "[PENDING / UPCOMING]";
+            const statusTag = isDone ? "[COMPLETED ✓]" : "[PENDING / UPCOMING]";
             const metrics = [
                 wo.distance ? `Dist: ${wo.distance}` : '',
                 wo.duration ? `Duration: ${wo.duration}` : '',
@@ -2748,6 +3143,12 @@ function generatePromptForWeeks(targetWeeks = null) {
     const a = p.availability;
     const availStr = `Mon: ${a.mon}m, Tue: ${a.tue}m, Wed: ${a.wed}m, Thu: ${a.thu}m, Fri: ${a.fri}m, Sat: ${a.sat}m, Sun: ${a.sun}m. (0 means NO training possible).`;
     
+    // Always compile recent logged activities
+    const recentRuns = (appData.runs || []).slice(-15);
+    const runLog = recentRuns.length > 0
+        ? recentRuns.map(r => `${r.date} [${r.type}]: ${r.distance ? r.distance+'km' : ''} ${r.duration ? r.duration+'m' : ''} ${r.rpe ? 'RPE:'+r.rpe+'/10' : ''}. Notes: ${r.notes||'none'}`).join('\n')
+        : "No activity logs recorded yet.";
+
     let prompt = "";
 
     if (currentPromptMode === 'initial') {
@@ -2765,6 +3166,9 @@ function generatePromptForWeeks(targetWeeks = null) {
 • Gear: Bike: ${p.gear.bike} | Shoes: ${p.gear.shoes} | Watch: ${p.gear.watch}
 • Current Limitations: ${p.limitations || "None"}
 • Availability: ${availStr}
+
+[ATHLETE'S LOGGED ACTIVITIES & WORKOUT HISTORY]
+${runLog}
 
 [TASKS]
 1. Assess goal realism and provide direct encouragement or modifications in "specialInformation".
@@ -2800,9 +3204,6 @@ function generatePromptForWeeks(targetWeeks = null) {
   ]
 }`;
     } else {
-        const runs = appData.runs.slice(-10);
-        const runLog = runs.map(r => `${r.date} [${r.type}]: ${r.distance}km, ${r.duration}m. Notes: ${r.notes||'none'}`).join('\n');
-        
         const wishesEl = document.getElementById('athleteWishesInput');
         const userWishes = wishesEl ? wishesEl.value.trim() : '';
         const wishesSection = userWishes
@@ -2827,10 +3228,10 @@ function generatePromptForWeeks(targetWeeks = null) {
 [ATHLETE'S WISHES & SPECIAL REQUESTS FOR THIS WEEK]
 ${wishesSection}
 
-[RECENT LOGGED ACTIVITIES (LAST 10)]
-${runLog || "No recent activity logs recorded yet."}
+[RECENT LOGGED ACTIVITIES (LAST 15)]
+${runLog}
 
-[INITIAL & SCHEDULED TRAINING PLAN (WHAT THE USER HAD AND WILL HAVE)]
+[INITIAL & SCHEDULED TRAINING PLAN (WITH WORKOUT COMPLETION STATUS)]
 ${planSection}
 
 [CORE COACHING DIRECTIVES: SCHEDULE STABILITY & MINIMAL INTERVENTION]
@@ -2880,8 +3281,7 @@ ${planSection}
     }
 
     document.getElementById('promptOutput').textContent = prompt;
-    copyTextToClipboard(prompt);
-    showToast('Prompt generated & copied to clipboard!');
+    copyTextToClipboard(prompt, 'Prompt generated & copied to clipboard!');
 }
 
 function copyPrompt() {
@@ -2912,9 +3312,20 @@ function applyAIPlan() {
         const overwriteEl = document.getElementById('overwritePlanCheck');
         const overwrite = overwriteEl ? overwriteEl.checked : true;
 
+        const newWeekNums = new Set(newPlan.weeks.map(w => w.week));
+        if (appData.completedWorkouts) {
+            Object.keys(appData.completedWorkouts).forEach(k => {
+                const m = k.match(/^w(\d+)_/);
+                if (m && newWeekNums.has(parseInt(m[1]))) {
+                    delete appData.completedWorkouts[k];
+                }
+            });
+        } else {
+            appData.completedWorkouts = {};
+        }
+
         if (overwrite || !appData.plan) {
             appData.plan = newPlan;
-            appData.completedWorkouts = {}; 
             appData.profile.currentWeek = newPlan.weeks[0]?.week || 1;
         } else {
             const existingWeeks = appData.plan.weeks.filter(w => !newPlan.weeks.find(nw => nw.week === w.week));
@@ -3141,8 +3552,16 @@ window.exportDataJSON = exportDataJSON;
 window.copyDataJSON = copyDataJSON;
 window.importDataJSON = importDataJSON;
 window.resetLocalStorage = resetLocalStorage;
+window.updatePlanStartDate = updatePlanStartDate;
+window.setPlanStartToYesterday = setPlanStartToYesterday;
+window.setPlanStartToThisMonday = setPlanStartToThisMonday;
+window.formatISODateFriendly = formatISODateFriendly;
 window.syncToSupabase = syncToSupabase;
 window.manualCloudSync = manualCloudSync;
+window.authSignIn = authSignIn;
+window.authSignUp = authSignUp;
+window.authSignOut = authSignOut;
+window.initSupabase = initSupabase;
 
 </script>
 </body>

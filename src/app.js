@@ -8,7 +8,39 @@ let syncStatus = 'local'; // 'local' | 'synced' | 'syncing' | 'offline' | 'error
 let isOfflinePendingSync = false;
 let syncDebounceTimeout = null;
 
-// Initialize Supabase Client
+// Storage Management with Cookie Fallback (Safari Strict/Private Mode & iOS PWA safe)
+function setStorageItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch(e) {
+        document.cookie = key + "=" + encodeURIComponent(value) + "; path=/; max-age=31536000; SameSite=Lax";
+    }
+}
+
+function getStorageItem(key) {
+    try {
+        const val = localStorage.getItem(key);
+        if (val) return val;
+    } catch(e) {}
+    
+    const nameEQ = key + "=";
+    const ca = document.cookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+    }
+    return null;
+}
+
+function removeStorageItem(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch(e) {}
+    document.cookie = key + '=; Max-Age=0; path=/; SameSite=Lax';
+}
+
+// Initialize Supabase Client with iOS/Safari resilient storage wrapper
 function initSupabase() {
     try {
         if (window.supabase && window.supabase.createClient) {
@@ -16,7 +48,12 @@ function initSupabase() {
                 auth: {
                     persistSession: true,
                     autoRefreshToken: true,
-                    detectSessionInUrl: true
+                    detectSessionInUrl: true,
+                    storage: {
+                        getItem: (key) => getStorageItem(key),
+                        setItem: (key, value) => setStorageItem(key, value),
+                        removeItem: (key) => removeStorageItem(key)
+                    }
                 }
             });
             setupSupabaseAuth();
@@ -49,7 +86,7 @@ const DEFAULT_DATA = {
     completedWorkouts: {},
     plan: null,
     exerciseDB: {},
-    lastModified: Date.now()
+    lastModified: 0
 };
 
 let appData = loadData();
@@ -60,31 +97,6 @@ let currentDate = new Date();
 let currentMonth = currentDate.getMonth();
 let currentYear = currentDate.getFullYear();
 let selectedDateStr = new Date().toISOString().slice(0,10);
-
-// Storage Management with Cookie Fallback
-function setStorageItem(key, value) {
-    try {
-        localStorage.setItem(key, value);
-    } catch(e) {
-        document.cookie = key + "=" + encodeURIComponent(value) + "; path=/; max-age=31536000";
-    }
-}
-
-function getStorageItem(key) {
-    try {
-        const val = localStorage.getItem(key);
-        if (val) return val;
-    } catch(e) {}
-    
-    const nameEQ = key + "=";
-    const ca = document.cookie.split(';');
-    for(let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
-    }
-    return null;
-}
 
 function loadData() {
     const saved = getStorageItem('trit_data');
@@ -131,11 +143,30 @@ function saveData(skipCloudSync = false) {
     }
 }
 
-// Auto-save on page hide/unload (Safari iOS tab closing & navigation fix)
+// Auto-save on page hide/unload & iOS app switching (Safari iOS WebKit background suspend fix)
 window.addEventListener('beforeunload', () => saveData(true));
 window.addEventListener('pagehide', () => saveData(true));
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        saveData(true);
+        if (syncDebounceTimeout) {
+            clearTimeout(syncDebounceTimeout);
+            syncDebounceTimeout = null;
+            if (supabaseClient && currentUser && navigator.onLine) {
+                syncToSupabase();
+            }
+        }
+    } else if (document.visibilityState === 'visible') {
+        // When user resumes or re-opens app on iPhone, check for newest remote updates
+        if (supabaseClient && currentUser && navigator.onLine) {
+            handleUserLoginSync();
+        }
+    }
+});
 
 // Supabase Auth and Cloud Synchronization
+let isInitialSyncDone = false;
+
 async function setupSupabaseAuth() {
     if (!supabaseClient) return;
 
@@ -145,8 +176,10 @@ async function setupSupabaseAuth() {
             currentUser = session.user;
             updateSyncStatusUI('synced');
             updateProfileSettingsUI();
-            // Pull newest cloud state in the background
-            handleUserLoginSync();
+            if (!isInitialSyncDone) {
+                isInitialSyncDone = true;
+                handleUserLoginSync();
+            }
         } else {
             currentUser = null;
             updateSyncStatusUI('local');
@@ -162,16 +195,20 @@ async function setupSupabaseAuth() {
         if (session && session.user) {
             const isNewLogin = (!currentUser || currentUser.id !== session.user.id);
             currentUser = session.user;
+            updateProfileSettingsUI();
             
-            if (event === 'SIGNED_IN' && isNewLogin) {
-                showToast(`Welcome, ${session.user.email}!`);
+            if (event === 'SIGNED_IN' || (!isInitialSyncDone && (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED'))) {
+                isInitialSyncDone = true;
+                if (isNewLogin) {
+                    showToast(`Welcome, ${session.user.email}!`);
+                }
                 await handleUserLoginSync();
             } else if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
                 updateSyncStatusUI('synced');
             }
-            updateProfileSettingsUI();
         } else {
             currentUser = null;
+            isInitialSyncDone = false;
             updateSyncStatusUI('local');
             updateProfileSettingsUI();
         }
@@ -201,32 +238,16 @@ async function setupSupabaseAuth() {
     }
 }
 
-// When logging in: Fetch user state from Supabase (user_metadata + user_data table), overwrite local state
+// When logging in: Fetch user state from Supabase (user_data table + user_metadata fallback), overwrite local state
 async function handleUserLoginSync() {
     if (!supabaseClient || !currentUser) return;
     updateSyncStatusUI('syncing');
 
     try {
-        // 1. Refresh currentUser to ensure we have the absolute latest user_metadata from server
-        try {
-            const { data: userData } = await supabaseClient.auth.getUser();
-            if (userData && userData.user) {
-                currentUser = userData.user;
-            }
-        } catch (uErr) {
-            console.warn("User refresh note:", uErr);
-        }
-
         let remoteData = null;
         let remoteTimestamp = 0;
 
-        // Check user_metadata (natively supported on ALL Supabase instances without needing any SQL tables)
-        if (currentUser && currentUser.user_metadata && currentUser.user_metadata.trit_payload) {
-            remoteData = currentUser.user_metadata.trit_payload;
-            remoteTimestamp = currentUser.user_metadata.trit_last_sync || remoteData.lastModified || 0;
-        }
-
-        // Also check user_data table if the table exists in user's Supabase database
+        // 1. Primary: Check PostgreSQL 'user_data' table (unlimited JSON payload, fast PostgREST)
         try {
             const { data: tableRow, error: tableErr } = await supabaseClient
                 .from('user_data')
@@ -236,28 +257,43 @@ async function handleUserLoginSync() {
 
             if (!tableErr && tableRow && (tableRow.data || tableRow.payload)) {
                 const tablePayload = tableRow.data || tableRow.payload;
-                const tableTime = new Date(tableRow.updated_at || 0).getTime() || tablePayload.lastModified || 0;
-                if (tableTime >= remoteTimestamp || !remoteData) {
-                    remoteData = tablePayload;
-                    remoteTimestamp = tableTime;
-                }
+                const tableTime = new Date(tableRow.updated_at || 0).getTime() || (tablePayload && tablePayload.lastModified) || 0;
+                remoteData = tablePayload;
+                remoteTimestamp = tableTime;
+            } else if (tableErr) {
+                console.warn("user_data table query notice:", tableErr.message || tableErr);
             }
         } catch (tblErr) {
-            // Table doesn't exist - this is expected if user didn't run SQL DDL
+            console.warn("Table query exception:", tblErr);
+        }
+
+        // 2. Secondary fallback: Check user_metadata if table row was not found
+        if (!remoteData) {
+            try {
+                const { data: userData } = await supabaseClient.auth.getUser();
+                if (userData && userData.user) {
+                    currentUser = userData.user;
+                }
+            } catch (uErr) {}
+
+            if (currentUser && currentUser.user_metadata && currentUser.user_metadata.trit_payload) {
+                remoteData = currentUser.user_metadata.trit_payload;
+                remoteTimestamp = currentUser.user_metadata.trit_last_sync || remoteData.lastModified || 0;
+            }
         }
 
         const localTime = appData.lastModified || 0;
         const localHasData = (appData.runs && appData.runs.length > 0) || 
                              (appData.customEvents && appData.customEvents.length > 0) ||
                              (appData.plan && appData.plan.weeks && appData.plan.weeks.length > 0) ||
-                             (appData.profile && appData.profile.age && appData.profile.age !== 28);
+                             (appData.profile && (appData.profile.raceDate || (appData.profile.age && appData.profile.age !== 28)));
 
         if (remoteData) {
             // Remote has data!
-            // If remote is newer, or if this device only had fresh default data, restore remote state:
+            // If remote is newer, or if this device had no custom data yet, restore remote state:
             if (remoteTimestamp >= localTime || !localHasData) {
                 appData = deepMerge(DEFAULT_DATA, remoteData);
-                appData.lastModified = Math.max(remoteTimestamp, Date.now());
+                appData.lastModified = Math.max(remoteTimestamp, localTime);
                 setStorageItem('trit_data', JSON.stringify(appData));
                 renderAllPages();
                 showToast("Cloud data synchronized!");
@@ -301,7 +337,7 @@ function scheduleCloudSync() {
     }, 600);
 }
 
-// Upsert state directly to user_metadata and optionally to table "user_data"
+// Upsert state directly to table "user_data" (primary) and user_metadata timestamp (secondary)
 async function syncToSupabase() {
     if (!supabaseClient || !currentUser) return;
 
@@ -316,34 +352,44 @@ async function syncToSupabase() {
         const now = Date.now();
         appData.lastModified = now;
 
-        // 1. Primary: Save directly to Supabase Auth user_metadata
-        // Guaranteed to work across all projects without needing any SQL migrations
-        const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
-            data: {
-                trit_payload: appData,
-                trit_last_sync: now,
-                updated_at: new Date().toISOString()
-            }
-        });
-
-        if (metaErr) {
-            console.warn("Metadata update note:", metaErr.message);
-        } else if (updatedUser && updatedUser.user) {
-            currentUser = updatedUser.user;
-        }
-
-        // 2. Secondary: If table user_data exists, upsert there too
+        // 1. Primary: Upsert directly to PostgreSQL table 'user_data'
+        let primarySaved = false;
         try {
-            await supabaseClient
+            const { error: tblErr } = await supabaseClient
                 .from('user_data')
                 .upsert({
                     user_id: currentUser.id,
                     data: appData,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date(now).toISOString()
                 }, { onConflict: 'user_id' });
+
+            if (!tblErr) {
+                primarySaved = true;
+            } else {
+                console.warn("user_data upsert error:", tblErr.message || tblErr);
+            }
         } catch (tblErr) {
-            // Table might not exist; safe to ignore
+            console.warn("user_data exception:", tblErr);
         }
+
+        // 2. Secondary: Update lightweight timestamp and payload in auth metadata
+        try {
+            const metaPayload = (JSON.stringify(appData).length < 25000) ? appData : null;
+            const updateMeta = {
+                trit_last_sync: now,
+                updated_at: new Date(now).toISOString()
+            };
+            if (metaPayload) {
+                updateMeta.trit_payload = metaPayload;
+            }
+            const { data: updatedUser, error: metaErr } = await supabaseClient.auth.updateUser({
+                data: updateMeta
+            });
+
+            if (!metaErr && updatedUser && updatedUser.user) {
+                currentUser = updatedUser.user;
+            }
+        } catch (mErr) {}
 
         isOfflinePendingSync = false;
         updateSyncStatusUI('synced');
@@ -514,6 +560,9 @@ async function authSignUp(email, password) {
                 <div style="color:var(--text-primary); line-height:1.5;">
                     Account created for <strong style="color:#ffffff;">${email.trim()}</strong>! Please check your email to confirm your account.
                 </div>
+                <div style="margin-top:8px; font-size:12px; color:var(--text-secondary); line-height:1.4;">
+                    <strong>iPhone Home Screen / PWA Notice:</strong> Clicking the link in your email will open Safari. Once confirmed, return to this Home Screen app and tap <strong>Log In</strong> with your email and password so your session is stored inside this app.
+                </div>
             `;
             authMsg.style.display = 'block';
         }
@@ -650,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!appData.profile.hasSeenGuide) {
         openGuide();
         appData.profile.hasSeenGuide = true;
-        saveData();
+        setStorageItem('trit_data', JSON.stringify(appData));
     }
     const evDateEl = document.getElementById('evDate');
     if (evDateEl) evDateEl.value = new Date().toISOString().slice(0,10);
